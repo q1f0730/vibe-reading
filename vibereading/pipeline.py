@@ -11,10 +11,10 @@ def build(text, out_html, title=None, author=None, work=None, theme="paper", pla
     """plan_in: 外部分镜（dict 或 JSON 文件路径）→ 跳过 LLM；reuse_plan: 复用 <输出>.plan.json。"""
     out_html = pathlib.Path(out_html)
     out_html.parent.mkdir(parents=True, exist_ok=True)
-    base = out_html.with_suffix("")
-    plan_path = base.with_suffix(".plan.json")
-    seg_path = base.with_suffix(".segments.json")
-    rep_path = base.with_suffix(".report.json")
+    stem = out_html.name[:-5] if out_html.name.endswith(".html") else out_html.name   # a.b.html → a.b
+    plan_path = out_html.parent / f"{stem}.plan.json"
+    seg_path = out_html.parent / f"{stem}.segments.json"
+    rep_path = out_html.parent / f"{stem}.report.json"
     t0 = time.time(); report = {"input_chars": len(text)}
 
     progress("segment", "切分原文")

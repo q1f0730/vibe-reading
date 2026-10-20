@@ -5,7 +5,8 @@ from . import components as C
 
 E = html.escape
 TPL = (pathlib.Path(__file__).parent / "template.html").read_text(encoding="utf-8")
-PALETTE = ["#2b4a6f", "#a3253c", "#8a5f1a", "#3f6b4f", "#6b4c8a", "#2f6f78", "#7a3b5c", "#5a5a2a"]
+PALETTE = ["#2b4a6f", "#a3253c", "#8a5f1a", "#3f6b4f", "#6b4c8a", "#2f6f78", "#7a3b5c", "#5a5a2a", "#8a3a1e", "#3d5a8a"]
+CHAPTER_MODE_CHARS = 20000   # ≥2 章且超过这么多字 → 分章阅读：只有当前章进 DOM，其余章在 <template> 里惰性展开
 HEAT_HUE = 14 / 360
 PRIORITY = {"car_night": 3, "doorbell": 3, "stairs_memory": 3, "window": 2, "stamp_cards": 2, "interior": 2, "ledger": 2,
             "timeline": 2, "knock": 1, "blur_chart": 1, "door": 1, "sound": 1, "object": 1, "silence": 0}
@@ -152,8 +153,32 @@ def curate(plan, segs, warnings):
 
 
 # ---------------------------------------------------------------- page
+def pick_chapters(seg, plan):
+    """章节：优先用切分得到的真实章名（≥2 章），否则用规划时的伪章。返回 (chapters, chapter_mode)。"""
+    chs = seg.get("chapters") or []
+    if len(chs) < 2:
+        chs = plan.get("chapters") or []
+    total = sum(len(x["text"]) for x in seg["segments"])
+    return chs, len(chs) >= 2 and total >= CHAPTER_MODE_CHARS
+
+
+def split_scenes_at_chapters(scenes, chs):
+    """分章模式下场景不能跨章：在章首处把场景切开（外部 plan.json 可能只有一个大场景）。"""
+    starts = sorted({c["start"] for c in chs})
+    out = []
+    for s in scenes:
+        cuts = [x for x in starts if s["start"] < x <= s["end"]]
+        a = s["start"]
+        for x in cuts + [s["end"] + 1]:
+            out.append(dict(s, start=a, end=x - 1)); a = x
+    return out
+
+
 def render(seg, plan, title=None, author=None, work=None, theme="paper"):
     segs = seg["segments"]; n = len(segs); warnings = []
+    chs, chapter_mode = pick_chapters(seg, plan)
+    if chapter_mode:
+        plan = dict(plan, scenes=split_scenes_at_chapters(plan["scenes"], chs))
     chars = fix_colors(plan["characters"])
     cmap = {c["id"]: c for c in chars}
     meta = plan["meta"]
@@ -194,11 +219,19 @@ def render(seg, plan, title=None, author=None, work=None, theme="paper"):
 <p class="hero-sub" aria-hidden="true">{E(sub)}</p></div></div>
 <div class="scroll-cue" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M19 12l-7 7-7-7"/></svg></div></section>''']
 
+    ch_of_scene = []
+    for s in plan["scenes"]:
+        ch_of_scene.append(max([k for k, c in enumerate(chs) if c["start"] <= s["start"]] or [0]) if chapter_mode else 0)
+
     toc, foot = [], []
     dropcap_done = False
+    ch_parts = {}
     for k, s in enumerate(plan["scenes"]):
         tone = s.get("tone", "day")
         sub_txt = " · ".join(x for x in [s.get("time", ""), s.get("place", "")] if x)
+        ck = ch_of_scene[k]
+        if chapter_mode and (k == 0 or ch_of_scene[k - 1] != ck):
+            toc.append(f'<li class="chap" data-c="{ck}"><a href="#c{ck}">{E(chs[ck]["title"] or f"第 {ck + 1} 章")}</a></li>')
         parts = [f'<div class="marker reveal" aria-hidden="true"><span>{k + 1:02d}</span>{E(s["name"])}'
                  f'{f"<small>{E(sub_txt)}</small>" if sub_txt else ""}</div>']
         band_open = False
@@ -208,7 +241,7 @@ def render(seg, plan, title=None, author=None, work=None, theme="paper"):
                 continue
             if sg["role"] == "footnote":
                 foot.append(i); continue
-            if sg["role"] == "heading":
+            if sg["role"] == "heading" and not chapter_mode:
                 toc.append(f'<li class="chap" aria-hidden="true">{E(sg["text"])}</li>')
             mem_open = False
             for v in at.get((i, "before"), []):
@@ -233,9 +266,26 @@ def render(seg, plan, title=None, author=None, work=None, theme="paper"):
             parts.append('<div class="fin reveal" aria-hidden="true">· · ·</div>')
         if band_open:
             parts.append("</div>")
-        body.append(f'<section class="scene tone-{tone}" id="s{k + 1}"><div class="col">' + "\n".join(parts) + "</div></section>")
+        html_scene = f'<section class="scene tone-{tone}" id="s{k + 1}"><div class="col">' + "\n".join(parts) + "</div></section>"
+        if chapter_mode:
+            ch_parts.setdefault(ck, []).append(html_scene)
+        else:
+            body.append(html_scene)
         toc.append(f'<li data-s="{k}"><a href="#s{k + 1}"><em>{k + 1:02d}</em>{E(s["name"])}'
                    f'{f"<small>{E(sub_txt)}</small>" if sub_txt else ""}</a></li>')
+    if chapter_mode:
+        title_of = lambda j: chs[j]["title"] or f"第 {j + 1} 章"
+        for ck in range(len(chs)):
+            inner = "\n".join(ch_parts.get(ck, []))
+            nav = ['<nav class="chnav" aria-label="章节切换">']
+            nav.append(f'<a class="prev" href="#c{ck - 1}" data-go="{ck - 1}"><small>上一章</small>{E(title_of(ck - 1))}</a>' if ck > 0 else '<span></span>')
+            nav.append(f'<a class="next" href="#c{ck + 1}" data-go="{ck + 1}"><small>下一章 · {ck + 2}/{len(chs)}</small>{E(title_of(ck + 1))}</a>' if ck + 1 < len(chs) else '<span class="end">全书完</span>')
+            nav.append("</nav>")
+            inner += "".join(nav)
+            if ck == 0:   # 第一章直接进 DOM（首屏 + 无 JS 可读），其余章惰性展开
+                body.append(f'<section class="chapter" id="c{ck}" data-ch="{ck}" data-live="1">{inner}</section>')
+            else:
+                body.append(f'<section class="chapter" id="c{ck}" data-ch="{ck}" hidden><template>{inner}</template></section>')
     if foot:
         fl = []
         for i in foot:
@@ -250,7 +300,11 @@ def render(seg, plan, title=None, author=None, work=None, theme="paper"):
             scene_of[i] = k
     state = {
         "key": seg["sha1"], "defaultTheme": theme,
-        "scenes": [{"name": s["name"], "time": s.get("time", ""), "place": s.get("place", "")} for s in plan["scenes"]],
+        "scenes": [{"name": s["name"], "time": s.get("time", ""), "place": s.get("place", ""), "c": ch_of_scene[k]}
+                   for k, s in enumerate(plan["scenes"])],
+        "chapters": [{"title": c["title"] or f"第 {k + 1} 章", "start": c["start"], "end": c["end"],
+                      "chars": sum(len(segs[i]["text"]) for i in range(c["start"], c["end"] + 1))}
+                     for k, c in enumerate(chs)] if chapter_mode else None,
         "chars": [{"id": c["id"], "name": c["name"], "color": c["color"], "night": c["night"]} for c in chars],
         "focal": plan.get("focal_pair", []),
         "paras": [{"s": scene_of[i], "sp": P[i]["sp"], "pr": P[i]["pr"], "in": round(P[i]["in"], 2),

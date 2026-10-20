@@ -12,7 +12,10 @@ const puppeteer = require('puppeteer-core'); const fs = require('fs');
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
   p.on('request', r => { const u = r.url(); if (!u.startsWith('file:') && !u.startsWith('data:') && !u.startsWith('blob:')) ext.push(u); });
   await p.setViewport({width: 1280, height: 800});
-  await p.goto('file://' + html, {waitUntil: 'load'});
+  await p.goto('file://' + html, {waitUntil: 'load', timeout: 120000});
+  // 整本书分章模式：其余章节在 <template> 里，先全部挂进 DOM 再逐段比对
+  rep.chapter_mode = await p.evaluate(() => !!(window.VR && STATE.chapters));
+  if (rep.chapter_mode) await p.evaluate(() => VR.renderAll());
   const got = await p.$$eval('[data-src]', els => els.map(e => [+e.dataset.src, e.textContent]));
   const mism = [];
   if (got.length !== segs.length) mism.push(`count ${got.length} != ${segs.length}`);
@@ -21,7 +24,8 @@ const puppeteer = require('puppeteer-core'); const fs = require('fs');
   rep.matched = got.filter(([i, t]) => segs[i] && t === segs[i].text).length;
   // scroll through the whole page so every reveal / observer runs
   const H = await p.evaluate(() => document.documentElement.scrollHeight);
-  for (let y = 0; y < H; y += 700) { await p.evaluate(v => scrollTo(0, v), y); await new Promise(r => setTimeout(r, 40)); }
+  const step = Math.max(700, Math.ceil(H / (rep.chapter_mode ? 80 : 300)));   // 大页面限制步数（整本书分章模式全挂载后很长）
+  for (let y = 0; y < H; y += step) { await p.evaluate(v => scrollTo(0, v), y); await new Promise(r => setTimeout(r, 40)); }
   await new Promise(r => setTimeout(r, 600));
   rep.overflow = {};
   for (const [w, h] of [[1280, 800], [390, 844]]) {

@@ -11,9 +11,9 @@ from .. import planner, segment
 ROOT = db.ROOT
 STATIC = pathlib.Path(__file__).resolve().parent / "static"
 SAMPLE_DIR = ROOT / "examples" / "kongyiji"
-MAX_BODY = 8_000_000
-MAX_CHARS = int(os.environ.get("VR_MAX_CHARS", 400_000))
-LABELS = {"mercury": ("快速 · Mercury mercury-3", "约 20–40 秒，偶有格式偏差会自动修正"),
+MAX_BODY = int(os.environ.get("VR_MAX_BODY", 24_000_000))   # 整本书 txt（≥1 MB）+ JSON 转义余量
+MAX_CHARS = int(os.environ.get("VR_MAX_CHARS", 1_500_000))
+LABELS = {"mercury": ("快速 · Mercury mercury-3", "短篇约 20–40 秒；整本书按章并发，约 5–15 分钟"),
           "qwen": ("质量 · 千问 qwen3.8-max", "每批 30–50 秒，分镜更稳")}
 
 CSP_APP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
@@ -109,7 +109,7 @@ class H(BaseHTTPRequestHandler):
             raise HTTPError(415, "需要 application/json")      # 同时挡掉跨站表单 CSRF
         n = int(self.headers.get("Content-Length") or 0)
         if n > MAX_BODY:
-            raise HTTPError(413, "请求太大（> 8 MB）")
+            raise HTTPError(413, f"请求太大（> {MAX_BODY // 1_000_000} MB）")
         try:
             body = json.loads(self.rfile.read(n) or b"{}")
             assert isinstance(body, dict)

@@ -7,6 +7,11 @@
 - 脚注：文末形如 "(1) …" "（1）…" "[1] …" "① …" "注1：…" 的段落标记为 footnote，并在正文里找到第一处
   相同标记作为引用位置（只加链接，不改文字）。
 - 章节标题：短行且匹配 第X章/回/节、Chapter N、序/楔子/尾声 等 → role=heading。
+  另外，若全文有 ≥3 个"空行之后的独立短行"（≤30 字、不以句读结尾，如「2011年1月」「三周后（2011年2月）」），
+  它们也视为章节标题（整本书常见的章名格式）。
+- 硬换行判定：只有当块内行（除末行外）大多数不以句读结尾时才进入 block 模式；
+  "每行一段 + 空行分章"的整本书不会被误判成"一章 = 一段"。
+- chapters：按章节标题划分的 [{start, end, title}]（标题段之前若有正文，算作无标题的第 0 章）。
 校验不变量：所有段落去空白后按顺序拼接 == 原文去空白（verify_lossless）。
 """
 import re, json, hashlib
@@ -25,6 +30,22 @@ def _is_cjk(ch):
     return "\u2e80" <= ch <= "\u9fff" or "\uff00" <= ch <= "\uffef" or "\u3000" <= ch <= "\u303f"
 
 
+TERMINAL = set("。！？!?…；;”」』\"’）)】—～~.")
+
+
+def _hard_wrapped(blocks):
+    """块内（除每块末行）以句读结尾的行占比 < 45% → 硬换行排版。"""
+    inner = [_strip(l) for b in blocks if len(b) > 1 for l in b[:-1] if _strip(l)]
+    if len(inner) < 4:
+        return False
+    ended = sum(1 for l in inner if l[-1] in TERMINAL)
+    return ended / len(inner) < 0.45
+
+
+def _chapter_title_like(t):
+    return 0 < len(t) <= 30 and t[-1] not in TERMINAL - set("）)】") and not t.endswith("：") and "，" not in t and "。" not in t
+
+
 def split(text):
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     raw_lines = text.split("\n")
@@ -38,11 +59,13 @@ def split(text):
         blocks.append(cur)
     multi = [b for b in blocks if len(b) > 1]
     mode = "line"
-    if blocks and sum(len(b) for b in blocks) / len(blocks) > 1.6 and len(multi) >= max(2, len(blocks) * 0.4):
+    if blocks and sum(len(b) for b in blocks) / len(blocks) > 1.6 and len(multi) >= max(2, len(blocks) * 0.4) and _hard_wrapped(blocks):
         mode = "block"
-    paras = []
+    paras = []; block_first = set()
     if mode == "line":
-        paras = [_strip(l) for b in blocks for l in b]
+        for b in blocks:
+            block_first.add(len(paras))
+            paras += [_strip(l) for l in b]
     else:
         for b in blocks:
             s = ""
@@ -53,10 +76,13 @@ def split(text):
                 s += l
             paras.append(s)
 
+    # 空行之后的独立短行 = 章名（仅当这种行 ≥3 个、且它们后面都跟着正文时才采用，避免短文本误判）
+    cand = [i for i in sorted(block_first) if _chapter_title_like(paras[i]) and i + 1 < len(paras) and i + 1 not in block_first]
+    block_heads = set(cand) if len(cand) >= 3 else set()
     segs = []
     for i, t in enumerate(paras):
         role = "text"
-        if len(t) <= 24 and HEAD.match(t):
+        if (len(t) <= 24 and HEAD.match(t)) or i in block_heads:
             role = "heading"
         elif len(t) <= 16 and DATELINE.match(t):
             role = "dateline"
@@ -82,8 +108,23 @@ def split(text):
                 b.setdefault("refs", []).append({"mark": hit, "fn": s["i"]})
                 s["ref_from"] = b["i"]
                 break
-    return {"mode": mode, "count": len(segs), "segments": segs,
+    return {"mode": mode, "count": len(segs), "segments": segs, "chapters": chapters(segs),
             "sha1": hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]}
+
+
+def chapters(segs):
+    """按 heading 段划分章节：[{start, end, title}]。没有标题时整篇是一章（title 为空）。"""
+    heads = [s["i"] for s in segs if s["role"] == "heading"]
+    out = []
+    if not heads or heads[0] > 0:
+        out.append({"start": 0, "end": (heads[0] - 1) if heads else len(segs) - 1, "title": ""})
+    for k, h in enumerate(heads):
+        end = heads[k + 1] - 1 if k + 1 < len(heads) else len(segs) - 1
+        out.append({"start": h, "end": end, "title": segs[h]["text"]})
+    # 只有一个空的前言段落时并入下一章
+    if len(out) > 1 and not out[0]["title"] and out[0]["end"] - out[0]["start"] < 0:
+        out.pop(0)
+    return out
 
 
 def verify_lossless(text, seg):

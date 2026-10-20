@@ -42,7 +42,8 @@ if (go) {
   const upd = () => {
     const m = modeVal(); $('#planf').classList.toggle('hide', m !== 'plan');
     go.disabled = !(text && text.trim()) || !m || (m === 'plan' && !plan);
-    $('#est').textContent = text ? `${text.length.toLocaleString()} 字 · 预计 ${m === 'plan' ? '2–5 秒' : Math.max(20, Math.round(text.length / 120)) + ' 秒左右'}` : '';
+    const est = n => n < 15000 ? Math.max(20, Math.round(n / 120)) + ' 秒左右' : `${Math.max(3, Math.round(n / 12000))}–${Math.max(6, Math.round(n / 6000))} 分钟（整本书按章并发，进度页可看到第几章）`;
+    $('#est').textContent = text ? `${text.length.toLocaleString()} 字 · 预计 ${m === 'plan' ? '2–5 秒' : est(text.length)}` : '';
   };
   $$('input[name=mode]').forEach(i => i.onchange = upd);
   const load = file => {
@@ -124,7 +125,7 @@ if (da) da.onsubmit = async e => { e.preventDefault(); if (!confirm('永久删�
 const dev = $('#dev');
 if (dev) {
   const jid = dev.dataset.job, bid = dev.dataset.book; const t0 = parseFloat(dev.dataset.created) * 1000;
-  const STEP_OF = {queued: null, start: null, segment: 'segment', outline: 'plan', detail: 'plan', 'detail+': 'plan', plan: 'plan', render: 'render', verify: 'verify', shots: 'verify', done: 'done', failed: null};
+  const STEP_OF = {queued: null, start: null, segment: 'segment', outline: 'plan', detail: 'plan', 'detail+': 'plan', plan: 'plan', cast: 'plan', chapters: 'plan', 'chapter+': 'plan', render: 'render', verify: 'verify', shots: 'verify', done: 'done', failed: null};
   const ORDER = ['segment', 'plan', 'render', 'verify'];
   let endT = null, last = -1;
   const tc = $('#tc'); const tcSmall = tc.querySelector('small').outerHTML;

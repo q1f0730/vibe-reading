@@ -1,5 +1,5 @@
 """生成任务：线程执行，进度与日志实时写入 SQLite（重启后可查；未完成的在启动时标为失败）。"""
-import json, os, secrets, shutil, threading, time, traceback
+import json, os, re, secrets, shutil, threading, time, traceback
 from . import db
 from .. import planner
 from ..pipeline import build
@@ -10,8 +10,9 @@ _sem = threading.BoundedSemaphore(MAX_CONCURRENT)
 # 进度页的四步：切分 → 规划 → 渲染 → 校验
 STEPS = [("segment", "切分", "Segment"), ("plan", "规划", "Plan"), ("render", "渲染", "Render"), ("verify", "校验", "Verify")]
 STAGE_STEP = {"segment": "segment", "outline": "plan", "detail": "plan", "detail+": "plan", "plan": "plan",
+              "cast": "plan", "chapters": "plan", "chapter+": "plan",
               "render": "render", "verify": "verify", "shots": "verify", "done": "done"}
-STAGE_PCT = {"segment": 6, "outline": 12, "detail": 30, "plan": 62, "render": 80, "verify": 88, "shots": 95, "done": 100}
+STAGE_PCT = {"segment": 6, "outline": 10, "cast": 12, "chapters": 14, "detail": 30, "plan": 62, "render": 80, "verify": 88, "shots": 95, "done": 100}
 
 
 def book_dir(book_id):
@@ -44,6 +45,7 @@ def _run(jid, book_id, kind, plan, model, verify):
     with _sem:
         c = db.conn(); t0 = time.time()
         log = []; state = {"pct": 1, "batches": 3, "stage": "segment", "last": 0}
+        lock = threading.Lock()   # 整本书模式下进度回调来自多个章节线程
 
         def save(force=False, **extra):
             now = time.time()
@@ -55,6 +57,7 @@ def _run(jid, book_id, kind, plan, model, verify):
                       (state["stage"], round(state["pct"], 1), json.dumps(log[-300:], ensure_ascii=False), now, *extra.values(), jid))
 
         def prog(stage, msg):
+          with lock:
             if stage != "done":
                 log.append(f"{time.time() - t0:05.1f}|{stage}|{msg}")
             if stage == "detail":
@@ -62,10 +65,14 @@ def _run(jid, book_id, kind, plan, model, verify):
                 except Exception: pass
             if stage == "detail+":
                 state["pct"] = min(58, state["pct"] + 28 / max(1, state["batches"]))
+            elif stage == "chapter+":   # "…（3/18）" → 14% + 已完成章节占比 × 48%
+                m = re.search(r"（(\d+)/(\d+)）", msg)
+                if m:
+                    state["pct"] = max(state["pct"], 14 + 48 * int(m.group(1)) / max(1, int(m.group(2))))
             elif stage in STAGE_PCT:
                 state["pct"] = max(state["pct"], STAGE_PCT[stage])
             state["stage"] = stage
-            save(force=stage in ("segment", "plan", "render", "verify"))
+            save(force=stage in ("segment", "plan", "render", "verify", "chapter+", "cast"))
 
         try:
             b = c.execute("SELECT * FROM books WHERE id=?", (book_id,)).fetchone()

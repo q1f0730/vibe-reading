@@ -132,6 +132,8 @@ h2.line{font-family:var(--font-display);font-size:calc(1.9rem*var(--fs));letter-
 .tone-night .marker::after{background:var(--night-rule)}
 .tone-night .fig figcaption,.night-band .fig figcaption{color:var(--night-dim)}
 .night-band{margin:3rem calc(50% - 50vw) 0;padding:3rem calc(50vw - 50%) 2rem}
+/* inside a memory column (asymmetric border) a full-bleed band would overflow by the border width → keep it in the column */
+.tone-memory .night-band,.memory-block .night-band{margin:2.4rem 0 0;padding:2rem 1.2rem 1.4rem}
 .tone-memory .col,.memory-block{background:var(--memory-bg);padding:2.4rem 1.8rem 1.2rem;border-left:3px solid var(--memory-rule)}
 .memory-block{margin:2.4rem 0}.memory-block .line{color:var(--memory-text)}.memory-block .fig{margin:0 auto 1.6rem}
 .tone-memory .line{color:var(--memory-text)}
@@ -268,6 +270,16 @@ h2.line{font-family:var(--font-display);font-size:calc(1.9rem*var(--fs));letter-
 .fn-back{color:var(--accent);text-decoration:none;margin-left:.4rem}
 .fin{text-align:center;letter-spacing:1.2em;color:var(--text2);margin-top:5rem;font-size:1.2rem}
 :target{scroll-margin-top:90px}
+/* chapters (whole-book mode): only the current chapter is in the DOM */
+.chapter[hidden]{display:none}
+.chnav{max-width:var(--measure);margin:2rem auto 6rem;padding:0 1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.chnav a{display:block;padding:1.1rem 1.2rem;border:1px solid var(--rule);color:var(--text);text-decoration:none;font-family:var(--font-display);letter-spacing:.08em;line-height:1.5}
+.chnav a small{display:block;font-family:var(--font-body);font-size:.75rem;letter-spacing:.2em;color:var(--text2);margin-bottom:.2rem}
+.chnav a:hover{border-color:var(--text2);background:var(--bg2)}
+.chnav .next{text-align:right;grid-column:2}.chnav .end{grid-column:2;text-align:right;color:var(--text2);letter-spacing:.3em;align-self:center}
+.toc li.chap a{display:block;padding:0;font-size:12px;letter-spacing:.2em;color:var(--text2)}
+.toc li.chap.cur a{color:var(--text);box-shadow:none}
+@media (max-width:640px){.chnav{grid-template-columns:1fr}.chnav .next,.chnav .end{grid-column:1}}
 .flash{animation:flash 2s var(--ease)}@keyframes flash{0%,30%{background:color-mix(in srgb,var(--accent) 14%,transparent)}100%{background:transparent}}
 
 /* ===================== RESPONSIVE ===================== */
@@ -354,29 +366,33 @@ const toc = $('#toc'), scrim = $('#scrim');
 function openToc(o){ toc.classList.toggle('open', o); scrim.classList.toggle('on', o); }
 $('#bToc').onclick = $('#mToc').onclick = () => openToc(true); scrim.onclick = () => openToc(false);
 addEventListener('keydown', e => { if (e.key === 'Escape') openToc(false); });
-$$('.toc a').forEach(a => a.addEventListener('click', () => openToc(false)));
+$('#toc').addEventListener('click', e => { if (e.target.closest('a')) openToc(false); });
 
-/* ---------- ink draw-on + reveal ---------- */
-if (!reduce) $$('.draw .ink :is(path,rect,line,circle,ellipse,polyline)').forEach(el => {
-  try { const L = Math.ceil(el.getTotalLength()) + 1; el.style.strokeDasharray = L; el.style.strokeDashoffset = L;
-  el.style.transition = 'stroke-dashoffset 2.2s cubic-bezier(0.25,1,0.5,1)'; } catch(e){}
-});
+/* ---------- ink draw-on + reveal (wire() runs again for each chapter that is mounted) ---------- */
 const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting){
   e.target.classList.add('visible');
   e.target.querySelectorAll('.ink :is(path,rect,line,circle,ellipse,polyline)').forEach(el => el.style.strokeDashoffset = 0);
   io.unobserve(e.target); } }), { threshold: 0.12 });
-$$('.reveal').forEach(el => io.observe(el));
+function wire(root){
+  if (!reduce) root.querySelectorAll('.draw .ink :is(path,rect,line,circle,ellipse,polyline)').forEach(el => {
+    try { const L = Math.ceil(el.getTotalLength()) + 1; el.style.strokeDasharray = L; el.style.strokeDashoffset = L;
+    el.style.transition = 'stroke-dashoffset 2.2s cubic-bezier(0.25,1,0.5,1)'; } catch(e){}
+  });
+  root.querySelectorAll('.reveal').forEach(el => io.observe(el));
+  if (!reduce) root.querySelectorAll('canvas[data-weather]').forEach(c => particles(c, c.dataset.weather));
+}
 
-/* ---------- particles: hero dust + window weather (only while on screen) ---------- */
+/* ---------- particles: hero dust + window weather (only while on screen; stop once unmounted) ---------- */
 function particles(cv, kind){
   const ctx = cv.getContext('2d'); let W = 0, H = 0, on = false, ps = [];
   const N = {dust:46, rain:70, snow:60, wind:18, night:40, clear:0, fog:0}[kind] || 0; if (!N) return;
   function size(){ W = cv.width = cv.offsetWidth * devicePixelRatio; H = cv.height = cv.offsetHeight * devicePixelRatio; }
   size(); addEventListener('resize', size);
   for (let i = 0; i < N; i++) ps.push({x:Math.random(), y:Math.random(), r:Math.random()*1.6+.4, v:Math.random()*.0003+.0001, p:Math.random()*6});
-  new IntersectionObserver(e => on = e[0].isIntersecting).observe(cv);
+  const ob = new IntersectionObserver(e => { on = e[0].isIntersecting; if (on && !W) size(); }); ob.observe(cv);
   const d = devicePixelRatio;
   (function loop(t){
+    if (!cv.isConnected){ ob.disconnect(); removeEventListener('resize', size); return; }
     if (on && W){ ctx.clearRect(0,0,W,H);
       for (const p of ps){
         if (kind === 'dust'){ p.y -= p.v; p.x += Math.sin(t/3000+p.p)*.00012; if (p.y < 0) p.y = 1;
@@ -393,13 +409,54 @@ function particles(cv, kind){
     requestAnimationFrame(loop);
   })(0);
 }
-if (!reduce){ const du = $('#dust'); if (du) particles(du, 'dust'); $$('canvas[data-weather]').forEach(c => particles(c, c.dataset.weather)); }
+if (!reduce){ const du = $('#dust'); if (du) particles(du, 'dust'); }
+$$('.hero canvas[data-weather]').forEach(c => !reduce && particles(c, c.dataset.weather));
+
+/* ---------- chapters (whole-book mode): mount one chapter at a time ---------- */
+const CHS = STATE.chapters;
+let curCh = 0;
+const chSec = k => document.getElementById('c' + k);
+if (CHS) $$('.chapter[data-live]').forEach(sec => {   // keep a pristine copy so the first chapter can be unmounted / remounted too
+  if (!sec.querySelector('template')){ const tp = document.createElement('template'); [...sec.childNodes].forEach(n => tp.content.appendChild(n.cloneNode(true))); sec.prepend(tp); }
+});
+$$('main > section:not(.chapter):not(.hero), main > footer, .chapter[data-live]').forEach(wire);
+function mount(k){
+  const sec = chSec(k); if (!sec) return null;
+  if (!sec.dataset.live){ sec.appendChild(sec.querySelector('template').content.cloneNode(true)); sec.dataset.live = '1'; wire(sec); }
+  sec.hidden = false; return sec;
+}
+function unmount(k){
+  const sec = chSec(k); if (!sec || !sec.dataset.live) return;
+  [...sec.childNodes].forEach(n => { if (n.nodeName !== 'TEMPLATE') n.remove(); });
+  delete sec.dataset.live; sec.hidden = true;
+}
+function showChapter(k){
+  if (!CHS || k < 0 || k >= CHS.length) return false;
+  if (k === curCh && chSec(k).dataset.live) return false;
+  mount(k); if (k !== curCh) unmount(curCh); curCh = k; store.set('ch', k);
+  relist(); return true;
+}
+function chapterOf(idx){ return CHS ? STATE.scenes[STATE.paras[idx].s].c : 0; }
+// jump to an element id that may live in an unmounted chapter
+function goTo(id, block){
+  let el = document.getElementById(id);
+  if (!el && CHS){
+    let k = -1;
+    if (/^c\d+$/.test(id)) k = +id.slice(1);
+    else if (/^s\d+$/.test(id)) k = STATE.scenes[+id.slice(1) - 1]?.c ?? -1;
+    if (k >= 0){ showChapter(k); el = document.getElementById(id); }
+  } else if (el && CHS && /^c\d+$/.test(id)) { showChapter(+id.slice(1)); }
+  if (!el) return false;
+  el.scrollIntoView({block: block || 'start', behavior: 'instant'}); return el;
+}
+window.VR = { show: showChapter, goTo,
+  renderAll(){ if (CHS) CHS.forEach((_, k) => mount(k)); relist(); } };   // used by the verifier: put every chapter in the DOM
 
 /* ---------- reading state: scene label, rail, overlays, progress, position ---------- */
-const lines = $$('[data-src]').filter(e => !e.closest('.notes'));
-const scenes = $$('section.scene');
-let tops = [], cur = -1;
+let lines = [], tops = [], cur = -1;
 function measure(){ tops = lines.map(e => e.getBoundingClientRect().top + scrollY); }
+function relist(){ lines = $$('main [data-src]').filter(e => !e.closest('.notes')); cur = -1; measure(); }
+relist();
 measure(); addEventListener('resize', () => { measure(); pick(); }); addEventListener('load', () => { measure(); pick(); });
 if (document.fonts) document.fonts.ready.then(() => { measure(); pick(); });
 const ST = STATE.paras, CH = STATE.chars, cmap = Object.fromEntries(CH.map(c => [c.id, c]));
@@ -408,6 +465,7 @@ const legend = $('#legend'); function paintLegend(){ const n = document.body.cla
 paintLegend(); $('#bTheme').addEventListener('click', paintLegend); $('#mTheme').addEventListener('click', paintLegend);
 let lastSave = 0;
 function pick(){
+  if (!lines.length) return;
   const y = scrollY + innerHeight * 0.5;
   let lo = 0, hi = tops.length - 1, k = 0;
   while (lo <= hi){ const m = (lo + hi) >> 1; if (tops[m] < y){ k = m; lo = m + 1; } else hi = m - 1; }
@@ -426,9 +484,17 @@ function pick(){
   $('#status').innerHTML = bw ? `<b>●</b> ${bw.name} · 脸红` : (st.te > 0.6 ? '· 气氛紧绷' : '');
   $('#ovBlush').style.opacity = st.bl > 0.3 ? Math.min(.8, (st.bl - 0.2) * 1.0) : 0;
   $('#ovPress').style.opacity = st.te > 0.45 ? Math.min(.85, (st.te - 0.45) * 1.9) : 0;
-  const doc = document.documentElement.scrollHeight - innerHeight, pct = Math.max(0, Math.min(100, scrollY / doc * 100));
-  $('#progress').style.width = pct + '%'; $('#tocPct').textContent = Math.round(pct) + '%';
+  const doc = document.documentElement.scrollHeight - innerHeight;
+  let pct = Math.max(0, Math.min(100, scrollY / doc * 100));
+  if (CHS){   // whole book: progress = chapters before + position inside this chapter, weighted by length
+    const sec = chSec(curCh), tot = CHS.reduce((a, c) => a + c.chars, 0);
+    const before = CHS.slice(0, curCh).reduce((a, c) => a + c.chars, 0);
+    const r = sec ? Math.max(0, Math.min(1, (scrollY + innerHeight - sec.offsetTop) / Math.max(1, sec.offsetHeight))) : 0;
+    pct = (before + r * CHS[curCh].chars) / tot * 100;
+  }
+  $('#progress').style.width = pct + '%'; $('#tocPct').textContent = (CHS ? `第 ${curCh + 1}/${CHS.length} 章 · ` : '') + Math.round(pct) + '%';
   $$('.toc li.cur').forEach(l => l.classList.remove('cur')); const tl = $(`.toc li[data-s="${st.s}"]`); if (tl) tl.classList.add('cur');
+  if (CHS){ const cl = $(`.toc li.chap[data-c="${curCh}"]`); if (cl) cl.classList.add('cur'); }
   const now = Date.now(); if (past && now - lastSave > 800){ store.set('pos', idx); lastSave = now; }
   target.st = st;
 }
@@ -437,17 +503,23 @@ addEventListener('scroll', () => requestAnimationFrame(pick), {passive:true});
 /* resume */
 (function(){
   const pos = store.get('pos', 0);
-  if (pos > 2 && !location.hash){
-    const el = $(`[data-src="${pos}"]`); if (!el) return;
+  if (pos > 2 && pos < ST.length && !location.hash){
     const sc = STATE.scenes[ST[pos].s];
-    $('#toastText').textContent = `上次读到「${sc.name}」· 第 ${pos + 1} 段`;
+    $('#toastText').textContent = (CHS ? `上次读到第 ${sc.c + 1} 章「${sc.name}」` : `上次读到「${sc.name}」`) + ` · 第 ${pos + 1} 段`;
     $('#toast').classList.add('on');
-    $('#toastGo').onclick = () => { $('#toast').classList.remove('on'); el.scrollIntoView({block:'center'}); el.classList.add('flash'); };
+    $('#toastGo').onclick = () => { $('#toast').classList.remove('on'); if (CHS) showChapter(chapterOf(pos));
+      const el = $(`[data-src="${pos}"]`); if (!el) return; el.scrollIntoView({block:'center'}); el.classList.add('flash'); };
     $('#toastX').onclick = () => $('#toast').classList.remove('on');
     setTimeout(() => $('#toast').classList.remove('on'), 9000);
   }
 })();
-$$('a.fn-ref, a.fn-back').forEach(a => a.addEventListener('click', () => { const t = $(a.getAttribute('href')); if (t){ setTimeout(() => { t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash'); }, 300); } }));
+document.addEventListener('click', e => {
+  const a = e.target.closest('a[href^="#"]'); if (!a) return;
+  const id = a.getAttribute('href').slice(1);
+  if (a.matches('.fn-ref, .fn-back')){ const t = document.getElementById(id); if (t){ setTimeout(() => { t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash'); }, 300); } return; }
+  if (CHS && (/^[cs]\d+$/.test(id))){ e.preventDefault(); if (goTo(id)) requestAnimationFrame(pick); }   // no hash: a reload should offer "continue reading", not jump to the chapter top
+});
+if (CHS && /^#[cs]\d+$/.test(location.hash)) requestAnimationFrame(() => goTo(location.hash.slice(1)));
 
 /* ---------- relation canvas (desktop rail + mobile topbar) ---------- */
 const anim = {in: 0, bl: 0, te: 0, a: {}};

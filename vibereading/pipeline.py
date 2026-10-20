@@ -51,7 +51,7 @@ def build(text, out_html, title=None, author=None, work=None, theme="paper", pla
     if verify:
         progress("verify", "逐段比对原文 / 外链 / JS 报错 / 溢出")
         r = subprocess.run(["node", str(TOOLS / "verify.js"), str(out_html.resolve()), str(seg_path.resolve())],
-                           capture_output=True, text=True, timeout=180)
+                           capture_output=True, text=True, timeout=600)
         try:
             report["verify"] = json.loads(r.stdout.strip().splitlines()[-1])
         except Exception:

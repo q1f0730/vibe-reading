@@ -1,0 +1,564 @@
+{
+ "meta": {
+  "title": "孔乙己",
+  "author": "鲁迅",
+  "work": "呐喊",
+  "subtitle": "孔乙己 · 我",
+  "hero_motif": "door",
+  "hero_segments": []
+ },
+ "characters": [
+  {
+   "id": "kong",
+   "name": "孔乙己",
+   "aliases": [
+    "孔乙己"
+   ],
+   "color": "#1F4E79"
+  },
+  {
+   "id": "wo",
+   "name": "我",
+   "aliases": [
+    "小伙计",
+    "伙计"
+   ],
+   "color": "#2E6B34"
+  },
+  {
+   "id": "zhang",
+   "name": "掌柜",
+   "aliases": [
+    "掌柜"
+   ],
+   "color": "#8B0000"
+  },
+  {
+   "id": "jiuke",
+   "name": "酒客",
+   "aliases": [
+    "喝酒的人",
+    "众人",
+    "短衣帮"
+   ],
+   "color": "#5B2C6F"
+  },
+  {
+   "id": "haizi",
+   "name": "邻舍孩子",
+   "aliases": [
+    "孩子",
+    "这一群孩子"
+   ],
+   "color": "#6B4226"
+  }
+ ],
+ "focal_pair": [
+  "kong",
+  "wo"
+ ],
+ "scenes": [
+  {
+   "start": 0,
+   "end": 2,
+   "name": "酒店格局",
+   "time": "二十多年前",
+   "place": "咸亨酒店",
+   "tone": "day"
+  },
+  {
+   "start": 3,
+   "end": 5,
+   "name": "孔乙己到店",
+   "time": "某日",
+   "place": "咸亨酒店",
+   "tone": "day"
+  },
+  {
+   "start": 6,
+   "end": 7,
+   "name": "教写茴字",
+   "time": "同日",
+   "place": "咸亨酒店",
+   "tone": "day"
+  },
+  {
+   "start": 8,
+   "end": 8,
+   "name": "快活与遗忘",
+   "time": "无",
+   "place": "无",
+   "tone": "memory"
+  },
+  {
+   "start": 9,
+   "end": 9,
+   "name": "中秋前议论",
+   "time": "中秋前",
+   "place": "咸亨酒店",
+   "tone": "day"
+  },
+  {
+   "start": 10,
+   "end": 10,
+   "name": "门槛上的他",
+   "time": "中秋后初冬",
+   "place": "咸亨酒店门槛",
+   "tone": "dim"
+  },
+  {
+   "start": 11,
+   "end": 13,
+   "name": "欠钱与消失",
+   "time": "年关至中秋",
+   "place": "咸亨酒店",
+   "tone": "memory"
+  }
+ ],
+ "paras": [
+  {
+   "sp": "",
+   "pr": [
+    "wo",
+    "zhang",
+    "jiuke"
+   ],
+   "in": 0.1,
+   "te": 0.1,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "",
+   "pr": [
+    "wo",
+    "zhang",
+    "jiuke"
+   ],
+   "in": 0.15,
+   "te": 0.2,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "",
+   "pr": [
+    "wo",
+    "zhang",
+    "jiuke"
+   ],
+   "in": 0.2,
+   "te": 0.15,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "jiuke",
+   "pr": [
+    "kong",
+    "wo",
+    "zhang",
+    "jiuke"
+   ],
+   "in": 0.3,
+   "te": 0.6,
+   "bl": 0.8,
+   "bw": "kong"
+  },
+  {
+   "sp": "",
+   "pr": [
+    "kong",
+    "wo",
+    "zhang",
+    "jiuke"
+   ],
+   "in": 0.35,
+   "te": 0.3,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "jiuke",
+   "pr": [
+    "kong",
+    "wo",
+    "zhang",
+    "jiuke"
+   ],
+   "in": 0.3,
+   "te": 0.5,
+   "bl": 0.7,
+   "bw": "kong"
+  },
+  {
+   "sp": "kong",
+   "pr": [
+    "kong",
+    "wo"
+   ],
+   "in": 0.6,
+   "te": 0.2,
+   "bl": 0.1,
+   "bw": ""
+  },
+  {
+   "sp": "kong",
+   "pr": [
+    "kong",
+    "haizi"
+   ],
+   "in": 0.7,
+   "te": 0.1,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "",
+   "pr": [
+    "kong",
+    "wo",
+    "zhang",
+    "jiuke"
+   ],
+   "in": 0.4,
+   "te": 0.1,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "zhang",
+   "pr": [
+    "wo",
+    "zhang",
+    "jiuke"
+   ],
+   "in": 0.25,
+   "te": 0.4,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "kong",
+   "pr": [
+    "kong",
+    "wo",
+    "zhang",
+    "jiuke"
+   ],
+   "in": 0.5,
+   "te": 0.7,
+   "bl": 0.3,
+   "bw": "kong"
+  },
+  {
+   "sp": "zhang",
+   "pr": [
+    "wo",
+    "zhang"
+   ],
+   "in": 0.2,
+   "te": 0.2,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "",
+   "pr": [
+    "wo"
+   ],
+   "in": 0.45,
+   "te": 0.3,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "",
+   "pr": [],
+   "in": 0.0,
+   "te": 0.0,
+   "bl": 0.0,
+   "bw": ""
+  }
+ ],
+ "utterances": [
+  {
+   "i": 3,
+   "q": "孔乙己，你脸上又添上新伤疤了！",
+   "sp": "jiuke"
+  },
+  {
+   "i": 3,
+   "q": "温两碗酒，要一碟茴香豆。",
+   "sp": "kong"
+  },
+  {
+   "i": 3,
+   "q": "你怎么这样凭空污人清白……",
+   "sp": "kong"
+  },
+  {
+   "i": 5,
+   "q": "孔乙己，你当真认识字么？",
+   "sp": "jiuke"
+  },
+  {
+   "i": 5,
+   "q": "你怎的连半个秀才也捞不到呢？",
+   "sp": "jiuke"
+  },
+  {
+   "i": 6,
+   "q": "你读过书么？",
+   "sp": "kong"
+  },
+  {
+   "i": 6,
+   "q": "读过书，……我便考你一考。茴香豆的茴字，怎样写的？",
+   "sp": "kong"
+  },
+  {
+   "i": 6,
+   "q": "不能写罢？……我教给你，记着！这些字应该记着。将来做掌柜的时候，写帐要用。",
+   "sp": "kong"
+  },
+  {
+   "i": 6,
+   "q": "谁要你教，不是草头底下一个来回的回字么？",
+   "sp": "wo"
+  },
+  {
+   "i": 6,
+   "q": "对呀对呀！……回字有四样写法，你知道么？",
+   "sp": "kong"
+  },
+  {
+   "i": 7,
+   "q": "不多了，我已经不多了。",
+   "sp": "kong"
+  },
+  {
+   "i": 7,
+   "q": "不多不多！多乎哉？不多也。",
+   "sp": "kong"
+  },
+  {
+   "i": 9,
+   "q": "孔乙己长久没有来了。还欠十九个钱呢！",
+   "sp": "zhang"
+  },
+  {
+   "i": 9,
+   "q": "他怎么会来？……他打折了腿了。",
+   "sp": "jiuke"
+  },
+  {
+   "i": 9,
+   "q": "哦！",
+   "sp": "zhang"
+  },
+  {
+   "i": 9,
+   "q": "后来怎么样？",
+   "sp": "zhang"
+  },
+  {
+   "i": 9,
+   "q": "怎么样？先写服辩，后来是打，打了大半夜，再打折了腿。",
+   "sp": "jiuke"
+  },
+  {
+   "i": 9,
+   "q": "后来呢？",
+   "sp": "zhang"
+  },
+  {
+   "i": 9,
+   "q": "后来打折了腿了。",
+   "sp": "jiuke"
+  },
+  {
+   "i": 9,
+   "q": "打折了怎样呢？",
+   "sp": "zhang"
+  },
+  {
+   "i": 9,
+   "q": "怎样？……谁晓得？许是死了。",
+   "sp": "jiuke"
+  },
+  {
+   "i": 10,
+   "q": "温一碗酒。",
+   "sp": "kong"
+  },
+  {
+   "i": 10,
+   "q": "孔乙己么？你还欠十九个钱呢！",
+   "sp": "zhang"
+  },
+  {
+   "i": 10,
+   "q": "这……下回还清罢。这一回是现钱，酒要好。",
+   "sp": "kong"
+  },
+  {
+   "i": 10,
+   "q": "不要取笑！",
+   "sp": "kong"
+  },
+  {
+   "i": 10,
+   "q": "跌断，跌，跌……",
+   "sp": "kong"
+  },
+  {
+   "i": 11,
+   "q": "孔乙己还欠十九个钱呢！",
+   "sp": "zhang"
+  }
+ ],
+ "visuals": [
+  {
+   "at": 0,
+   "pos": "before",
+   "type": "interior",
+   "params": {
+    "room": "tavern",
+    "props": [
+     "counter",
+     "wine_jar",
+     "bowl",
+     "table",
+     "chair"
+    ],
+    "caption": "曲尺柜台温酒"
+   }
+  },
+  {
+   "at": 2,
+   "pos": "after",
+   "type": "silence",
+   "params": {
+    "length": "short"
+   }
+  },
+  {
+   "at": 3,
+   "pos": "before",
+   "type": "sound",
+   "params": {
+    "glyph": "笑",
+    "count": 6,
+    "caption": "哄笑四起"
+   }
+  },
+  {
+   "at": 3,
+   "pos": "after",
+   "type": "object",
+   "params": {
+    "thing": "coins",
+    "action": "none",
+    "caption": "排出九文大钱"
+   }
+  },
+  {
+   "at": 5,
+   "pos": "after",
+   "type": "sound",
+   "params": {
+    "glyph": "笑",
+    "count": 5,
+    "caption": "众人又哄笑"
+   }
+  },
+  {
+   "at": 6,
+   "pos": "before",
+   "type": "object",
+   "params": {
+    "thing": "bean_dish",
+    "action": "none",
+    "caption": "茴香豆一碟"
+   }
+  },
+  {
+   "at": 7,
+   "pos": "after",
+   "type": "object",
+   "params": {
+    "thing": "bean_dish",
+    "action": "none",
+    "caption": "豆分给孩子"
+   }
+  },
+  {
+   "at": 9,
+   "pos": "before",
+   "type": "ledger",
+   "params": {
+    "entries": [
+     {
+      "text": "孔乙己 欠十九钱",
+      "state": "written"
+     }
+    ],
+    "caption": "粉板记欠"
+   }
+  },
+  {
+   "at": 10,
+   "pos": "before",
+   "type": "window",
+   "params": {
+    "weather": "wind",
+    "view": "street",
+    "caption": "秋风初冬"
+   }
+  },
+  {
+   "at": 10,
+   "pos": "after",
+   "type": "object",
+   "params": {
+    "thing": "coins",
+    "action": "drop",
+    "caption": "四文大钱"
+   }
+  },
+  {
+   "at": 11,
+   "pos": "after",
+   "type": "timeline",
+   "params": {
+    "labels": [
+     "年关",
+     "端午",
+     "中秋"
+    ],
+    "caption": "年复一年"
+   }
+  },
+  {
+   "at": 12,
+   "pos": "after",
+   "type": "silence",
+   "params": {
+    "length": "long"
+   }
+  }
+ ],
+ "quotes": [
+  {
+   "at": 8,
+   "text": "孔乙己是这样的使人快活，可是没有他，别人也便这么过。",
+   "w": 5
+  },
+  {
+   "at": 12,
+   "text": "我到现在终于没有见——大约孔乙己的确死了。",
+   "w": 4
+  }
+ ]
+}

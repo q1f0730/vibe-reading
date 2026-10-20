@@ -1,0 +1,16 @@
+# 生成物
+out/
+server_out/
+*.png
+screenshots/
+# 版权测试材料（只在本地）
+examples-private/
+chapter1.txt
+# 依赖 / 环境
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.key

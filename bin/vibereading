@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# VibeReading CLI：vibereading build input.txt -o out.html [--plan plan.json] [--fast|--quality]
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PY=python3; [ -x "$DIR/.venv/bin/python" ] && PY="$DIR/.venv/bin/python"
+PYTHONPATH="$DIR${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m vibereading.cli "$@"

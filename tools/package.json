@@ -1,0 +1,9 @@
+{
+  "name": "vibe-reading-tools",
+  "private": true,
+  "description": "Headless-Chromium checks for VibeReading pages (verify.js / shots.js)",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer-core": "^25.14.0"
+  }
+}

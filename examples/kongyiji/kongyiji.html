@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>呐喊 · 孔乙己</title>
+<!-- VibeReading · generated reading page. Zero external requests: no fonts, images or scripts are fetched. -->
+<style>
+/* ===================== THEMES ===================== */
+:root{
+  --bg:#faf9f7; --bg2:#f3f0ea; --text:#1a1a1a; --text2:#5e5e5e; --rule:#e5e2db;
+  --accent:#c41e3a; --heat:#ff6a3d; --press:20,16,14;
+  --night:#16191d; --night-text:#e6e1d8; --night-dim:#a9a397; --night-rule:#2c3137;
+  --memory-bg:#f1ede4; --memory-text:#4f483f; --memory-rule:#b9ad97;
+  --dim-bg:#f0eee9;
+  --font-display:'Noto Serif CJK SC','Source Han Serif SC','Songti SC','STSong','Cormorant Garamond',serif;
+  --font-body:'Noto Serif CJK SC','Source Han Serif SC','Songti SC','SimSun',serif;
+  --measure:660px; --ease:cubic-bezier(0.25,1,0.5,1); --fs:1;
+}
+.theme-night{
+  --bg:#15171b; --bg2:#1d2025; --text:#e4ded3; --text2:#a39d92; --rule:#2c3137; --accent:#e06a7d;
+  --dim-bg:#191c20; --memory-bg:#211f1b; --memory-text:#cfc5b4; --memory-rule:#6d6252; --night:#0d0f12; --press:0,0,0;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{font-family:var(--font-body);background:var(--bg);color:var(--text);line-height:1.95;overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;transition:background .5s,color .5s}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.055;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+main,section,footer{position:relative;z-index:1}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+/* ===================== FIXED CHROME ===================== */
+.progress{position:fixed;top:0;left:0;height:2px;width:0;background:var(--accent);z-index:1000}
+.ov{position:fixed;inset:0;pointer-events:none;z-index:5;opacity:0;transition:opacity 1s var(--ease)}
+.ov-blush{background:radial-gradient(ellipse at center,transparent 58%,rgba(255,106,61,.30) 100%)}
+.ov-press{background:radial-gradient(ellipse at center,transparent 36%,rgba(var(--press),.45) 100%)}
+.tools{position:fixed;top:14px;right:16px;z-index:60;display:flex;gap:6px}
+.tools button{height:34px;padding:0 12px;border:1px solid var(--rule);border-radius:17px;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  font-size:13px;letter-spacing:.08em;color:var(--text2);backdrop-filter:blur(6px)}
+.tools button:hover,.tools button[aria-pressed="true"]{color:var(--text);border-color:var(--text2)}
+/* rail: who is here, how close, who blushes */
+.rail{position:fixed;z-index:20;left:24px;top:50%;transform:translateY(-50%);width:196px;opacity:0;
+  transition:opacity .6s var(--ease);pointer-events:none;font-size:12px;color:var(--text2)}
+.rail.on{opacity:1}
+.rail .sname{font-family:var(--font-display);font-size:15px;letter-spacing:.2em;color:var(--text)}
+.rail .sub{font-size:11.5px;letter-spacing:.08em;margin-top:2px;min-height:1.4em}
+.rail canvas{display:block;width:196px;height:132px;margin:8px 0 2px}
+.rail .status{min-height:1.5em;font-size:12px;letter-spacing:.06em}
+.rail .status b{font-weight:400;color:var(--heat)}
+.rail .legend{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:6px}
+.rail .legend span{white-space:nowrap}.rail .legend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.rail.dark{color:var(--night-dim)}.rail.dark .sname{color:var(--night-text)}
+.topbar{display:none}
+/* toc drawer */
+.toc{position:fixed;top:0;right:0;bottom:0;width:min(320px,86vw);z-index:90;background:var(--bg);border-left:1px solid var(--rule);
+  transform:translateX(102%);visibility:hidden;transition:transform .45s var(--ease),visibility 0s .45s;display:flex;flex-direction:column}
+.toc.open{transform:none;visibility:visible;transition:transform .45s var(--ease);box-shadow:-12px 0 40px rgba(0,0,0,.1)}
+.toc header{padding:22px 22px 12px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--rule)}
+.toc header b{font-family:var(--font-display);letter-spacing:.25em;font-weight:600}
+.toc header span{font-size:12px;color:var(--text2)}
+.toc ol{list-style:none;overflow:auto;padding:10px 0 30px;flex:1}
+.toc li a{display:grid;grid-template-columns:2.4em 1fr;padding:9px 22px;color:var(--text2);text-decoration:none;font-size:14px;line-height:1.5}
+.toc li a small{grid-column:2;font-size:11.5px;opacity:.8}
+.toc li a:hover{background:var(--bg2);color:var(--text)}
+.toc li.cur a{color:var(--text);box-shadow:inset 3px 0 0 var(--accent)}
+.toc li a em{font-style:normal;color:var(--accent);font-family:var(--font-display)}
+.toc li.chap{padding:16px 22px 4px;font-size:12px;letter-spacing:.3em;color:var(--text2)}
+.scrim{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .4s}
+.scrim.on{opacity:1;pointer-events:auto}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,calc(100% + 60px));visibility:hidden;z-index:95;background:var(--text);color:var(--bg);
+  border-radius:24px;padding:10px 10px 10px 20px;font-size:14px;display:flex;gap:12px;align-items:center;transition:transform .5s var(--ease);max-width:calc(100vw - 32px)}
+.toast.on{transform:translate(-50%,0);visibility:visible}
+.toast button{background:var(--bg);color:var(--text);border-radius:16px;padding:4px 14px;font-size:13px;white-space:nowrap}
+.toast .x{background:none;color:var(--bg);padding:4px 6px;opacity:.7}
+
+/* ===================== HERO ===================== */
+.hero{min-height:100vh;min-height:100svh;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:4rem 1.5rem}
+#dust{position:absolute;inset:0;width:100%;height:100%}
+.hero-inner{position:relative;display:flex;align-items:center;gap:clamp(2rem,6vw,5rem);max-width:980px}
+.hero-art{flex:none;width:clamp(130px,18vw,200px)}
+.kicker{font-size:.85rem;letter-spacing:.35em;color:var(--text2);margin-bottom:1rem}
+.hero-title{font-family:var(--font-display);font-weight:700;font-size:clamp(3rem,8.5vw,6.2rem);line-height:1.08;letter-spacing:.08em;word-break:keep-all}
+.hero .dateline{font-family:var(--font-display);font-size:clamp(1.15rem,2.3vw,1.5rem);color:var(--accent);margin:1.1rem 0 .4rem;letter-spacing:.2em;text-align:left}
+.hero-sub{color:var(--text2);font-size:1rem;margin-top:.6rem}
+.hero-text>*{opacity:0;animation:fadeUp 1.2s var(--ease) forwards}
+.hero-text>*:nth-child(2){animation-delay:.25s}.hero-text>*:nth-child(3){animation-delay:.5s}.hero-text>*:nth-child(4){animation-delay:.75s}.hero-text>*:nth-child(5){animation-delay:1s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.scroll-cue{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);color:var(--text2);animation:bounce 2.4s infinite}
+@keyframes bounce{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,8px)}}
+/* hero motifs */
+.m-door{position:relative;aspect-ratio:2/3.2;border:2px solid var(--text);border-bottom-width:4px;perspective:600px;background:#efe9de}
+.m-door .light{position:absolute;inset:0;background:linear-gradient(100deg,#f7e2b4,#fbf1d9 60%,transparent);opacity:0;animation:lightIn 2.4s 1s var(--ease) forwards}
+.m-door .leaf{position:absolute;inset:0;background:var(--bg2);border-right:1px solid var(--text);transform-origin:left center;animation:doorOpen 2.4s 1s var(--ease) forwards}
+.m-door .leaf::after{content:"";position:absolute;right:12%;top:52%;width:8px;height:8px;border-radius:50%;background:var(--text)}
+@keyframes doorOpen{to{transform:rotateY(-38deg)}}@keyframes lightIn{to{opacity:1}}
+.m-window{position:relative;aspect-ratio:3/4;border:2px solid var(--text);background:linear-gradient(#dfe5e6,#eef0ec);overflow:hidden}
+.m-window::before,.m-window::after{content:"";position:absolute;background:var(--text)}
+.m-window::before{left:50%;top:0;bottom:0;width:2px}.m-window::after{top:50%;left:0;right:0;height:2px}
+.m-window canvas{position:absolute;inset:0;width:100%;height:100%}
+.m-lamp{position:relative;height:260px}
+.m-lamp .cord{position:absolute;left:50%;top:0;width:1.5px;height:110px;background:var(--text);transform-origin:top;animation:swing 5s ease-in-out infinite}
+.m-lamp .shade{position:absolute;left:-26px;top:100%;width:54px;height:30px;border:2px solid var(--text);border-bottom:none;border-radius:30px 30px 0 0;background:var(--bg2)}
+.m-lamp .cone{position:absolute;left:-90px;top:calc(100% + 28px);width:182px;height:150px;background:radial-gradient(ellipse at top,rgba(247,214,140,.55),transparent 70%);clip-path:polygon(40% 0,60% 0,100% 100%,0 100%)}
+@keyframes swing{0%,100%{transform:rotate(4deg)}50%{transform:rotate(-4deg)}}
+.m-moon{position:relative;aspect-ratio:1;border-radius:50%;box-shadow:inset -22px 8px 0 0 var(--text);opacity:.85;animation:fadeUp 2s var(--ease)}
+
+/* ===================== SCENES + TYPE ===================== */
+.scene{padding:clamp(4rem,11vh,7.5rem) 1.5rem}
+.col{max-width:var(--measure);margin:0 auto;position:relative}
+.marker{font-family:var(--font-display);letter-spacing:.3em;font-size:.9rem;color:var(--text2);display:flex;align-items:baseline;gap:.9rem;margin-bottom:2.4rem;flex-wrap:wrap}
+.marker span{color:var(--accent);font-weight:700}
+.marker small{letter-spacing:.12em;font-size:.78rem;opacity:.8}
+.marker::after{content:"";flex:1;min-width:2rem;height:1px;background:var(--rule);align-self:center}
+.line{font-size:calc(clamp(1.05rem,1.15vw + .6rem,1.2rem)*var(--fs));margin-bottom:1.15em;text-align:justify;position:relative}
+h2.line{font-family:var(--font-display);font-size:calc(1.9rem*var(--fs));letter-spacing:.15em;text-align:center;margin:1rem 0 3rem}
+.dropcap::first-letter{font-family:var(--font-display);float:left;font-size:3.5em;line-height:.9;margin:.08em .12em 0 0;color:var(--accent)}
+.fn-ref{color:var(--accent);text-decoration:none;font-size:.75em;vertical-align:super}
+/* speaker: a quiet dot in the gutter; the name only for the paragraph being read */
+.say::before{content:"";position:absolute;left:-19px;top:.82em;width:6px;height:6px;border-radius:50%;background:var(--sp);opacity:.45;transition:opacity .3s,transform .3s}
+.say.cur::before{opacity:1;transform:scale(1.35)}
+.say::after{content:attr(data-spn);position:absolute;right:calc(100% + 30px);top:.42em;font-size:12px;letter-spacing:.1em;color:var(--sp);white-space:nowrap;opacity:0;transition:opacity .35s;line-height:1.4}
+.say.cur::after{opacity:.95}
+.utt{text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--sp) 50%,transparent);text-decoration-thickness:1px;text-underline-offset:.38em;text-decoration-skip-ink:none}
+.utt:hover{text-decoration-thickness:2px}
+.no-sp .say::before,.no-sp .say::after{display:none}.no-sp .utt{text-decoration:none}
+/* tones */
+.tone-dim{background:var(--dim-bg)}
+.tone-night,.night-band{background:var(--night);color:var(--night-text)}
+.tone-night .line,.night-band .line{color:var(--night-text)}
+.tone-night .marker,.night-band .marker{color:var(--night-dim)}
+.tone-night .marker::after{background:var(--night-rule)}
+.tone-night .fig figcaption,.night-band .fig figcaption{color:var(--night-dim)}
+.night-band{margin:3rem calc(50% - 50vw) 0;padding:3rem calc(50vw - 50%) 2rem}
+.tone-memory .col,.memory-block{background:var(--memory-bg);padding:2.4rem 1.8rem 1.2rem;border-left:3px solid var(--memory-rule)}
+.memory-block{margin:2.4rem 0}.memory-block .line{color:var(--memory-text)}.memory-block .fig{margin:0 auto 1.6rem}
+.tone-memory .line{color:var(--memory-text)}
+.tone-memory .say::before,.memory-block .say::before{left:-14px}
+.tone-memory .say::after,.memory-block .say::after{display:none}
+/* ===================== REVEAL ===================== */
+.js .reveal{opacity:0;transform:translateY(12px);transition:opacity .6s var(--ease),transform .6s var(--ease)}
+.js .reveal.visible{opacity:1;transform:none}
+
+/* ===================== COMPONENTS ===================== */
+.fig{margin:2.6rem auto 3rem;text-align:center}
+.fig figcaption{font-size:.8rem;letter-spacing:.2em;color:var(--text2);margin-top:.8rem}
+.ink{width:100%;height:auto;fill:none;stroke:var(--text);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.ink .thick{stroke-width:2.6}.ink .soft{stroke:var(--text2)}.ink .fillc{fill:var(--bg2)}
+.ink .fill-dark{fill:#5b3a26;stroke:none}.ink .fill-warm{fill:rgba(214,170,60,.35)}
+.ink text{fill:var(--text);stroke:none;font-family:var(--font-display);font-size:22px}
+/* doorbell */
+.bell{position:relative;width:120px;height:120px;margin:0 auto}
+.bell-plate{position:absolute;inset:34px;border:1.5px solid var(--text);border-radius:10px;background:var(--bg2)}
+.bell-btn{position:absolute;inset:14px;border-radius:50%;border:1.5px solid var(--text);background:var(--bg)}
+.visible .bell-btn{animation:press .5s .3s 2 var(--ease)}
+@keyframes press{50%{transform:scale(.82);background:var(--accent)}}
+.ring{position:absolute;inset:34px;border:1.5px solid var(--accent);border-radius:50%;opacity:0}
+.visible .ring{animation:ring 2.2s var(--ease) infinite}.visible .r2{animation-delay:.5s}.visible .r3{animation-delay:1s}
+@keyframes ring{0%{transform:scale(.6);opacity:.8}100%{transform:scale(2.4);opacity:0}}
+.c-doorbell figcaption{letter-spacing:.5em;color:var(--accent)}
+/* door */
+.c-door .frame{width:74px;height:116px;margin:0 auto;border:2px solid var(--text);border-bottom-width:4px;perspective:300px;background:#f3e3bd}
+.c-door .leaf{position:relative;width:100%;height:100%;background:var(--bg2);border-right:1px solid var(--text);transform-origin:left;transition:transform 1.8s .4s var(--ease);background-image:linear-gradient(var(--rule),var(--rule)),linear-gradient(var(--rule),var(--rule));background-size:64% 1px,64% 1px;background-position:50% 22%,50% 60%;background-repeat:no-repeat}
+.c-door .leaf::after{content:"";position:absolute;right:10%;top:50%;width:7px;height:7px;border-radius:50%;background:var(--text)}
+.c-door[data-a=open] .leaf{transform:rotateY(0)}.c-door[data-a=open].visible .leaf{transform:rotateY(-62deg)}
+.c-door[data-a=close] .leaf{transform:rotateY(-70deg)}.c-door[data-a=close].visible .leaf{transform:rotateY(0)}
+.c-door[data-a=ajar] .leaf{transform:rotateY(0)}.c-door[data-a=ajar].visible .leaf{transform:rotateY(-24deg)}
+/* stamp cards */
+.c-stamp{display:flex;gap:1.2rem;justify-content:center;flex-wrap:wrap}
+.c-stamp figcaption{width:100%}
+.card{width:150px;padding:1rem;border:1px solid var(--rule);background:var(--bg);box-shadow:0 1px 0 var(--rule);text-align:left}
+.card small{display:block;font-size:.75rem;letter-spacing:.15em;color:var(--text2)}
+.stamp{display:inline-block;margin-top:.4rem;font-family:var(--font-display);font-size:2rem;line-height:1.3;color:var(--accent);border:2px solid var(--accent);padding:0 .5rem;
+  transform:rotate(-8deg) scale(1.8);opacity:0;transition:all .45s cubic-bezier(.34,1.56,.64,1) .3s;white-space:nowrap}
+.c-stamp.visible .stamp{transform:rotate(-8deg) scale(1);opacity:.9}
+.c-stamp.visible .card:nth-child(2) .stamp{transition-delay:.9s}.c-stamp.visible .card:nth-child(3) .stamp{transition-delay:1.5s}
+/* object */
+.c-object svg{width:120px;overflow:visible}
+.c-object .spin{transform-box:view-box;transform-origin:60px 60px}
+.c-object.visible .spin{animation:wobble 4s ease-in-out infinite}
+@keyframes wobble{0%,100%{transform:rotate(-26deg)}50%{transform:rotate(26deg)}}
+.c-object .steam path{stroke:var(--text2);stroke-dasharray:4 6;opacity:0}
+.c-object.visible .steam path{animation:steam 3.2s ease-in-out infinite}.c-object.visible .steam path:nth-child(2){animation-delay:1s}.c-object.visible .steam path:nth-child(3){animation-delay:2s}
+@keyframes steam{0%{opacity:0;transform:translateY(8px)}40%{opacity:.8}100%{opacity:0;transform:translateY(-14px)}}
+.c-object .drop{transform-box:view-box}
+.c-object.visible .drop{animation:drop 1.4s .5s cubic-bezier(.5,0,.75,0) forwards}
+@keyframes drop{to{transform:translateY(22px) rotate(14deg)}}
+.c-object .flame{transform-box:fill-box;transform-origin:50% 100%;fill:#e9a23b;stroke:none}
+.c-object.visible .flame{animation:flick 1.3s ease-in-out infinite}
+@keyframes flick{0%,100%{transform:scale(1,1)}50%{transform:scale(.85,1.15)}}
+/* blur chart */
+.blurc{width:min(100%,360px);fill:none;stroke:var(--text);stroke-width:1.2}
+.blurc rect{fill:color-mix(in srgb,var(--text) 9%,transparent)}
+.c-blur.visible .blurc{animation:stare 7s 1s ease-in forwards}
+@keyframes stare{to{filter:blur(3.5px);opacity:.55}}
+/* window */
+.c-window .glass{position:relative;background:linear-gradient(180deg,#eef1f0,#f6f5f1);overflow:hidden}
+.theme-night .say::before{opacity:.65}
+.theme-night .c-window .glass,.c-window[data-w=night] .glass{background:linear-gradient(180deg,#1f2833,#2b333d)}
+.c-window[data-w=night] .ink,.theme-night .c-window .ink{stroke:#cfc8bb}
+.c-window .glass canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.c-window .view{stroke:#6c7b6a}
+.breath{position:absolute;left:50%;top:55%;width:34%;height:46%;transform:translate(-50%,-50%);border-radius:50%;
+  background:radial-gradient(ellipse,rgba(255,255,255,.9),rgba(255,255,255,0) 70%);opacity:0;filter:blur(6px)}
+.c-window.visible .breath{animation:breath 5.5s 2.4s ease-in-out infinite}
+@keyframes breath{0%,100%{opacity:0;transform:translate(-50%,-50%) scale(.7)}35%{opacity:.75;transform:translate(-50%,-50%) scale(1)}}
+.c-window[data-w=fog] .glass::after{content:"";position:absolute;inset:0;background:rgba(240,242,240,.55);backdrop-filter:blur(2px)}
+/* car */
+.car{width:100%;height:auto}
+.car .frame{fill:none;stroke:#d9d3c7;stroke-width:2}.car .road{stroke:#6a6e72;stroke-width:1.4;fill:none}
+.car .horizon{stroke:#4b5056;stroke-width:1}
+.car .dashl{stroke:#d8cfa8;stroke-width:3;stroke-dasharray:10 18;animation:road 1.1s linear infinite}
+@keyframes road{to{stroke-dashoffset:-28}}
+.car .mirror{fill:#2a2f35;stroke:#d9d3c7;stroke-width:1.5}.car .board{fill:#0f1114}.car .wheel{fill:none;stroke:#3a4048;stroke-width:6}
+.car .sweep{fill:rgba(255,236,190,.12);animation:sweep 6s 1s ease-in-out infinite}
+@keyframes sweep{0%{transform:translateX(0)}60%,100%{transform:translateX(900px)}}
+.c-car figcaption{color:var(--night-dim)}
+/* stairs memory */
+.c-stairs svg{width:150px}
+.c-stairs path{stroke:var(--memory-rule)}
+.c-stairs .robe{fill:var(--bg);stroke:var(--memory-rule);opacity:0;transition:opacity 1s 1.2s,transform 3s 2.2s var(--ease)}
+.c-stairs.visible .robe{opacity:1;transform:translate(-26px,26px)}
+/* knock */
+.c-knock .frame{position:relative;width:60px;height:90px;margin:0 auto;border:2px solid var(--text);border-bottom:none}
+.k{position:absolute;right:-2px;top:40%;width:18px;height:18px;border:1.5px solid var(--kc,var(--accent));border-radius:50%;opacity:0}
+.c-knock.visible .k{animation:knock 1.6s .4s var(--ease) 2}.c-knock.visible .k2{animation-delay:.65s}
+@keyframes knock{0%{opacity:.9;transform:scale(.4)}100%{opacity:0;transform:scale(2.6)}}
+.c-knock figcaption{color:var(--kc,var(--accent))}
+/* silence */
+.c-silence{height:28vh;display:flex;align-items:center;justify-content:center;margin:1rem 0}
+.c-silence[data-l=long]{height:48vh}
+.c-silence i{width:5px;height:5px;border-radius:50%;background:var(--text2);opacity:0;transition:opacity 2.6s .6s}
+.c-silence.visible i{opacity:.55;animation:fadeDot 6s 3s ease-in-out infinite}
+@keyframes fadeDot{50%{opacity:.08}}
+/* timeline */
+.c-timeline ol{list-style:none;display:flex;justify-content:space-between;position:relative;max-width:560px;margin:0 auto;padding-top:22px}
+.c-timeline ol::before{content:"";position:absolute;left:6%;right:6%;top:28px;height:1px;background:var(--rule)}
+.c-timeline ol::after{content:"";position:absolute;left:6%;top:28px;height:1px;width:0;background:var(--text);transition:width 4.5s .4s linear}
+.c-timeline.visible ol::after{width:88%}
+.c-timeline li{position:relative;flex:1;text-align:center;font-size:.85rem;letter-spacing:.1em;color:var(--text2);padding-top:16px}
+.c-timeline li::before{content:"";position:absolute;left:50%;top:0;width:11px;height:11px;margin-left:-5.5px;border-radius:50%;border:1.5px solid var(--text2);background:var(--bg);transition:background .4s}
+.c-timeline.visible li::before{background:var(--text);transition-delay:calc(var(--n)*.85s + .4s)}
+/* ledger (粉板 / chalkboard) */
+.c-ledger .board{display:inline-block;min-width:240px;max-width:100%;padding:1.2rem 1.8rem 1.4rem;background:#2f3a35;border:6px solid #6b5640;border-radius:3px;text-align:left;box-shadow:0 2px 0 rgba(0,0,0,.15)}
+.c-ledger .row{position:relative;color:#ecebe2;font-family:var(--font-display);font-size:1.15rem;letter-spacing:.12em;line-height:2;white-space:nowrap}
+.c-ledger .row::after{content:"";position:absolute;inset:.35em -.4em;background:#2f3a35;transform:scaleX(0);transform-origin:left;transition:transform 1.6s 1.2s var(--ease);box-shadow:0 0 8px 4px #2f3a35}
+.c-ledger.visible .row.erased::after{transform:scaleX(1)}
+.c-ledger.visible .row.erased{color:rgba(236,235,226,.35)}
+/* sound burst */
+.c-sound .field{position:relative;height:150px;max-width:520px;margin:0 auto}
+.c-sound .g{position:absolute;font-family:var(--font-display);color:var(--text2);opacity:0;line-height:1}
+.c-sound.visible .g{animation:burst 3.4s var(--ease) infinite;animation-delay:var(--d)}
+@keyframes burst{0%{opacity:0;transform:scale(.6)}25%{opacity:.75}100%{opacity:0;transform:scale(1.25) translateY(-14px)}}
+/* pull quote */
+.pull{margin:4rem 0;padding:2.4rem 1.6rem 2rem;border-top:1px solid var(--text);border-bottom:1px solid var(--text);display:grid;grid-template-columns:auto 1fr;gap:1.4rem;align-items:center}
+.pull.noicon{grid-template-columns:1fr}
+.pull blockquote{font-family:var(--font-display);font-size:clamp(1.25rem,1.8vw + .6rem,1.6rem);line-height:1.6}
+.pull-src{font-size:.75rem;letter-spacing:.2em;color:var(--text2)}
+.pull:not(.noicon) .pull-src{grid-column:2}
+.door-mini{width:44px;height:70px;border:1.5px solid var(--text);perspective:200px;background:#f3e3bd;grid-row:span 2}
+.door-mini .leaf{width:100%;height:100%;background:var(--bg2);border-right:1px solid var(--text);transform-origin:left;transform:rotateY(-70deg);transition:transform 1.8s .6s var(--ease)}
+.pull.visible .door-mini .leaf{transform:rotateY(0)}
+.qmark{font-family:var(--font-display);font-size:4rem;line-height:.6;color:var(--accent);grid-row:span 2;align-self:start}
+.tone-night .pull{border-color:var(--night-dim)}
+/* footnotes */
+.notes{padding:3rem 1.5rem 5rem;border-top:1px solid var(--rule);background:var(--bg2)}
+.notes .line{font-size:.88rem;color:var(--text2);text-align:left}
+.fn-back{color:var(--accent);text-decoration:none;margin-left:.4rem}
+.fin{text-align:center;letter-spacing:1.2em;color:var(--text2);margin-top:5rem;font-size:1.2rem}
+:target{scroll-margin-top:90px}
+.flash{animation:flash 2s var(--ease)}@keyframes flash{0%,30%{background:color-mix(in srgb,var(--accent) 14%,transparent)}100%{background:transparent}}
+
+/* ===================== RESPONSIVE ===================== */
+@media (max-width:1099px){
+  .rail{display:none}.tools{display:none}
+  .topbar{display:flex;position:fixed;left:0;right:0;top:0;height:50px;z-index:60;align-items:center;gap:8px;padding:0 6px 0 4px;
+    background:color-mix(in srgb,var(--bg) 94%,transparent);border-bottom:1px solid var(--rule);backdrop-filter:blur(6px);
+    transform:translateY(-100%);transition:transform .4s var(--ease),background .4s}
+  .topbar.on{transform:none}
+  .topbar.dark{background:rgba(13,15,18,.94);border-color:var(--night-rule);color:var(--night-text)}
+  .topbar button{width:38px;height:38px;flex:none;font-size:15px;color:inherit;opacity:.8}
+  .topbar .tt{flex:1;min-width:0;line-height:1.25}
+  .topbar .tt b{display:block;font-weight:600;font-size:13.5px;letter-spacing:.12em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar .tt small{display:block;font-size:11px;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar canvas{width:112px;height:40px;flex:none}
+  .scene,.notes{scroll-margin-top:56px}
+  .say::after{display:none}
+}
+@media (max-width:640px){
+  .hero-inner{flex-direction:column;text-align:center;gap:2rem}.hero .dateline{text-align:center}
+  .hero-art{width:120px}
+  .line{text-align:left}
+  .say::before{left:-13px}
+  .utt{text-decoration-color:color-mix(in srgb,var(--sp) 38%,transparent)}
+  .scene{padding-left:1.35rem;padding-right:1.35rem}
+  .pull{grid-template-columns:1fr;padding:2rem .4rem}.door-mini,.qmark{grid-row:auto}.pull:not(.noicon) .pull-src{grid-column:1}
+  .tone-memory .col,.memory-block{padding:1.8rem 1.1rem 1rem 1.3rem}
+  .c-timeline li{font-size:.72rem;letter-spacing:0}
+  .c-ledger .board{min-width:0;padding:1rem 1.2rem}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .js .reveal{opacity:1;transform:none}
+}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+[data-sp="narrator"]{--sp:#4a6fa5} .theme-night [data-sp="narrator"],.tone-night [data-sp="narrator"],.night-band [data-sp="narrator"]{--sp:#6486b9}
+[data-sp="kongyiji"]{--sp:#6b8e23} .theme-night [data-sp="kongyiji"],.tone-night [data-sp="kongyiji"],.night-band [data-sp="kongyiji"]{--sp:#6b8e23}
+[data-sp="boss"]{--sp:#8b4513} .theme-night [data-sp="boss"],.tone-night [data-sp="boss"],.night-band [data-sp="boss"]{--sp:#c76823}
+[data-sp="shorts"]{--sp:#2b4a6f} .theme-night [data-sp="shorts"],.tone-night [data-sp="shorts"],.night-band [data-sp="shorts"]{--sp:#5786be}
+[data-sp="longs"]{--sp:#483d8b} .theme-night [data-sp="longs"],.tone-night [data-sp="longs"],.night-band [data-sp="longs"]{--sp:#877dc6}
+[data-sp="kids"]{--sp:#a3253c} .theme-night [data-sp="kids"],.tone-night [data-sp="kids"],.night-band [data-sp="kids"]{--sp:#d95a71}
+[data-sp="drinker"]{--sp:#3f6b4f} .theme-night [data-sp="drinker"],.tone-night [data-sp="drinker"],.night-band [data-sp="drinker"]{--sp:#56926b}
+</style>
+</head>
+<body class="no-js">
+<div class="progress" id="progress"></div>
+<div class="ov ov-blush" id="ovBlush"></div>
+<div class="ov ov-press" id="ovPress"></div>
+<div class="tools" role="toolbar" aria-label="阅读设置">
+  <button id="bToc" aria-label="目录">目录</button>
+  <button id="bTheme" aria-pressed="false" aria-label="夜间主题">夜间</button>
+  <button id="bSp" aria-pressed="true" aria-label="显示说话人标记">说话人</button>
+</div>
+<div class="topbar" id="topbar">
+  <button id="mToc" aria-label="目录">☰</button>
+  <div class="tt" aria-hidden="true"><b id="mName"></b><small id="mSub"></small></div>
+  <canvas id="mThread" aria-hidden="true"></canvas>
+  <button id="mTheme" aria-label="切换夜间主题">◐</button>
+</div>
+<div class="rail" id="rail" aria-hidden="true">
+  <div class="sname" id="sName"></div><div class="sub" id="sSub"></div>
+  <canvas id="thread"></canvas>
+  <div class="status" id="status"></div>
+  <div class="legend" id="legend"></div>
+</div>
+<div class="scrim" id="scrim"></div>
+<nav class="toc" id="toc" aria-label="目录"><header><b>目 录</b><span id="tocPct">0%</span></header><ol><li data-s="0"><a href="#s1"><em>01</em>柜台温酒<small>二十多年间 · 咸亨酒店</small></a></li><li data-s="1"><a href="#s2"><em>02</em>哄笑窃书<small>日常 · 咸亨酒店</small></a></li><li data-s="2"><a href="#s3"><em>03</em>教写茴字<small>日常 · 咸亨酒店</small></a></li><li data-s="3"><a href="#s4"><em>04</em>没有他也过<small>日常 · 咸亨酒店</small></a></li><li data-s="4"><a href="#s5"><em>05</em>打折了腿<small>中秋前两三天 · 咸亨酒店</small></a></li><li data-s="5"><a href="#s6"><em>06</em>门槛温酒<small>初冬下半天 · 咸亨酒店门槛</small></a></li><li data-s="6"><a href="#s7"><em>07</em>粉板欠账<small>年关至如今 · 咸亨酒店</small></a></li></ol></nav>
+<div class="toast" id="toast" role="status"><span id="toastText"></span><button id="toastGo">继续阅读</button><button class="x" id="toastX" aria-label="关闭">✕</button></div>
+<main>
+<section class="hero" id="top"><canvas id="dust" aria-hidden="true"></canvas><div class="hero-inner"><div class="hero-art m-door" aria-hidden="true"><div class="light"></div><div class="leaf"></div></div>
+<div class="hero-text"><p class="kicker" aria-hidden="true">鲁迅 · 《呐喊》</p><h1 class="hero-title">孔乙己</h1>
+<p class="hero-sub" aria-hidden="true">鲁镇咸亨酒店 · 小伙计 · 孔乙己</p></div></div>
+<div class="scroll-cue" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M19 12l-7 7-7-7"/></svg></div></section>
+<section class="scene tone-day" id="s1"><div class="col"><div class="marker reveal" aria-hidden="true"><span>01</span>柜台温酒<small>二十多年间 · 咸亨酒店</small></div>
+<figure class="fig c-interior reveal draw" aria-hidden="true"><svg viewBox="0 0 600 270" class="ink"><path d="M40 150 H380 V254" class="thick"/><path d="M40 150 V254"/><line x1="40" y1="200" x2="380" y2="200" class="soft"/><path d="M380 150 L470 120 V230 L380 254" /><path d="M90 150 q-14 -30 4 -50 h28 q18 20 4 50 z" class="fillc"/><line x1="96" y1="100" x2="120" y2="100"/><path d="M150 150 q-14 -30 4 -50 h28 q18 20 4 50 z" class="fillc"/><line x1="156" y1="100" x2="180" y2="100"/><rect x="200" y="210" width="70" height="44"/><path d="M215 210 q20 -18 40 0"/><line x1="0" y1="254" x2="600" y2="254"/><line x1="0" y1="20" x2="480" y2="20" class="soft"/></svg><figcaption>咸亨酒店曲尺形柜台</figcaption></figure>
+<p class="line dropcap reveal" data-src="0">鲁镇的酒店的格局，是和别处不同的：都是当街一个曲尺形的大柜台，柜里面豫备着热水，可以随时温酒。做工的人，傍午傍晚散了工，每每花四文铜钱，买一碗酒——这是二十多年前的事，现在每碗要涨到十文，——靠柜外站着，热热的喝了休息；倘肯多花一文，便可以买一碟盐煮笋，或者茴香豆，做下酒物了，如果出到了十几文，那就能买一样荤菜，但这些顾客，多是短衣帮，大抵没有这样阔绰。只有穿长衫的，才踱进店面隔壁的房子里，要酒要菜，慢慢地坐喝。</p>
+<figure class="fig c-object reveal" aria-hidden="true"><svg viewBox="0 0 120 120" class="ink"><g class="" style="animation-delay:0.0s"><ellipse cx="60" cy="92" rx="22" ry="7" class="fillc"/><rect x="56" y="89" width="8" height="5"/></g><g class="" style="animation-delay:0.25s"><ellipse cx="60" cy="83" rx="22" ry="7" class="fillc"/><rect x="56" y="80" width="8" height="5"/></g><g class="" style="animation-delay:0.5s"><ellipse cx="60" cy="74" rx="22" ry="7" class="fillc"/><rect x="56" y="71" width="8" height="5"/></g><g class="" style="animation-delay:0.75s"><ellipse cx="60" cy="65" rx="22" ry="7" class="fillc"/><rect x="56" y="62" width="8" height="5"/></g></svg><figcaption>四文铜钱买一碗酒</figcaption></figure>
+<p class="line reveal" data-src="1">我从十二岁起，便在镇口的咸亨酒店里当伙计，掌柜说，<span class="utt" data-sp="boss" title="掌柜">样子太儍，怕侍候不了长衫主顾，就在外面做点事罢。</span>外面的短衣主顾，虽然容易说话，但唠唠叨叨缠夹不清的也很不少。他们往往要亲眼看着黄酒从坛子里舀出，看过壶子底里有水没有，又亲看将壶子放在热水里，然后放心：在这严重监督之下，羼水也很为难。所以过了几天，掌柜又说我干不了这事。幸亏荐头的情面大，辞退不得，便改为专管温酒的一种无聊职务了。</p>
+<p class="line reveal" data-src="2">我从此便整天的站在柜台里，专管我的职务。虽然没有什么失职，但总觉有些单调，有些无聊。掌柜是一副凶脸孔，主顾也没有好声气，教人活泼不得；只有孔乙己到店，才可以笑几声，所以至今还记得。</p></div></section>
+<section class="scene tone-day" id="s2"><div class="col"><div class="marker reveal" aria-hidden="true"><span>02</span>哄笑窃书<small>日常 · 咸亨酒店</small></div>
+<p class="line reveal" data-src="3">孔乙己是站着喝酒而穿长衫的唯一的人。他身材很高大；青白脸色，皱纹间时常夹些伤痕；一部乱蓬蓬的花白的胡子。穿的虽然是长衫，可是又脏又破，似乎十多年没有补，也没有洗。他对人说话，总是满口之乎者也，教人半懂不懂的。因为他姓孔，别人便从描红纸上的『上大人孔乙己』这半懂不懂的话里，替他取下一个绰号，叫作孔乙己。孔乙己一到店，所有喝酒的人便都看着他笑，有的叫道：『<span class="utt" data-sp="drinker" title="一个喝酒的人">孔乙己，你脸上又添上新伤疤了！</span>』他不回答，对柜里说：『<span class="utt" data-sp="kongyiji" title="孔乙己">温两碗酒，要一碟茴香豆。</span>』便排出九文大钱。他们又故意的高声嚷道：『<span class="utt" data-sp="drinker" title="一个喝酒的人">你一定又偸了人家的东西了！</span>』孔乙己睁大眼睛说：『<span class="utt" data-sp="kongyiji" title="孔乙己">你怎么这样凭空污人清白……</span>』『<span class="utt" data-sp="drinker" title="一个喝酒的人">什么清白？我前天亲眼见你偸了何家的书，吊着打。</span>』孔乙己便涨红了脸，额上的青筋条条绽出，争辩道：『<span class="utt" data-sp="kongyiji" title="孔乙己">窃书不能算偸……窃书！……读书人的事，能算偸么？</span>』接连便是难懂的话，什么『君子固穷』，什么『者乎』之类，引得众人都哄笑起来；店内外充满了快活的空气。</p>
+<aside class="pull reveal" aria-hidden="true"><div class="qmark">“</div><blockquote>窃书不能算偸……窃书！……读书人的事，能算偸么？</blockquote><span class="pull-src">摘自上文</span></aside>
+<figure class="fig c-sound reveal" aria-hidden="true"><div class="field"><span class="g" style="left:29.3%;top:33.7%;font-size:1.47rem;--d:2.55s">笑</span><span class="g" style="left:59.3%;top:48.1%;font-size:2.56rem;--d:0.19s">笑</span><span class="g" style="left:69.5%;top:23.9%;font-size:1.33rem;--d:0.51s">笑</span><span class="g" style="left:34.0%;top:12.0%;font-size:1.18rem;--d:2.47s">笑</span><span class="g" style="left:39.5%;top:68.3%;font-size:1.89rem;--d:2.18s">笑</span><span class="g" style="left:45.9%;top:22.1%;font-size:2.11rem;--d:0.18s">笑</span><span class="g" style="left:46.2%;top:17.8%;font-size:1.23rem;--d:1.23s">笑</span><span class="g" style="left:39.5%;top:62.1%;font-size:1.23rem;--d:1.12s">笑</span></div><figcaption>店内外快活的空气</figcaption></figure>
+<p class="line reveal" data-src="4">听人家背地里谈论，孔乙己原来也读过书，但终于没有进学，又不会营生；于是愈过愈穷，弄到将要讨饭了。幸而写得一笔好字，便替人家钞钞书，换一碗饭吃。可惜他又有一样坏脾气，便是好喝懒做。坐不到几天，便连人和书籍纸张笔砚，一齐失踪。如是几次，叫他钞书的人也没有了。孔乙己没有法，便免不了偶然做些偸窃的事。但他在我们店里，品行却比别人都好，就是从不拖欠；虽然间或没有现钱，暂时记在粉板上，但不出一月，定然还清，从粉板上拭去了孔乙己的名字。</p>
+<p class="line reveal" data-src="5">孔乙己喝过半碗酒，涨红的脸色渐渐复了原，旁人便又问道，『<span class="utt" data-sp="drinker" title="一个喝酒的人">孔乙己，你当真认识字么？</span>』孔乙己看着问他的人，显出不屑置辩的神气。他们便接着说道：『<span class="utt" data-sp="drinker" title="一个喝酒的人">你怎的连半个秀才也捞不到呢？</span>』孔乙己立刻显出颓唐不安模样，脸上笼上了一层灰色，嘴里说些话；这回可是全是之乎者也之类，一些不懂了。在这时候，众人也都哄笑起来：店内外充满了快活的空气。</p></div></section>
+<section class="scene tone-day" id="s3"><div class="col"><div class="marker reveal" aria-hidden="true"><span>03</span>教写茴字<small>日常 · 咸亨酒店</small></div>
+<p class="line reveal" data-src="6">在这些时候，我可以附和着笑，掌柜是决不责备的。而且掌柜见了孔乙己，也每每这样问他，引人发笑。孔乙己自己知道不能和他们谈天，便只好向孩子说话。有一回对我说道，『<span class="utt" data-sp="kongyiji" title="孔乙己">你读过书么？</span>』我略略点一点头。他说，『<span class="utt" data-sp="kongyiji" title="孔乙己">读过书，……我便考你一考。茴香豆的茴字，怎样写的？</span>』我想，讨饭一样的人，也配考我么？便回过脸去，不再理会。孔乙己等了许久，很恳切的说道：『<span class="utt" data-sp="kongyiji" title="孔乙己">不能写罢？……我教给你，记着！这些字应该记着。将来做掌柜的时候，写帐要用。</span>』我暗想我和掌柜的等级还很远呢，而且我们掌柜也从不将茴香豆上帐；又好笑，又不耐烦，懒懒的答他道：『<span class="utt" data-sp="narrator" title="我">谁要你教，不是草头底下一个来回的回字么？</span>』孔乙己显出极高兴的样子，将两个指头的长指甲敲着柜台，点头说：『<span class="utt" data-sp="kongyiji" title="孔乙己">对呀对呀！……回字有四样写法，你知道么？</span>』我愈不耐烦了，努着嘴走远。孔乙己刚用指甲蘸了酒，想在柜上写字，见我毫不热心，便又叹一口气，显出极惋惜的样子。</p>
+<div class="c-silence reveal" aria-hidden="true" data-l="short"><i></i></div>
+<p class="line say reveal" data-src="7" data-sp="kongyiji" data-spn="孔乙己">有几回，邻舍孩子听得笑声，也赶热闹，围住了孔乙己。他便给他们茴香豆吃，一人一颗。孩子吃完豆，仍然不散，眼睛都望着碟子。孔乙己着了慌，伸开五指将碟子罩住，弯腰下去说道：『<span class="utt" data-sp="kongyiji" title="孔乙己">不多了，我已经不多了。</span>』直起身又看一看豆，自己摇头说：『<span class="utt" data-sp="kongyiji" title="孔乙己">不多不多！多乎哉？不多也。</span>』于是这一群孩子都在笑声里走散了。</p></div></section>
+<section class="scene tone-day" id="s4"><div class="col"><div class="marker reveal" aria-hidden="true"><span>04</span>没有他也过<small>日常 · 咸亨酒店</small></div>
+<p class="line reveal" data-src="8">孔乙己是这样的使人快活，可是没有他，别人也便这么过。</p></div></section>
+<section class="scene tone-dim" id="s5"><div class="col"><div class="marker reveal" aria-hidden="true"><span>05</span>打折了腿<small>中秋前两三天 · 咸亨酒店</small></div>
+<figure class="fig c-timeline reveal" aria-hidden="true"><ol><li style="--n:0">中秋前</li><li style="--n:1">年关</li><li style="--n:2">端午</li><li style="--n:3">中秋</li><li style="--n:4">年关</li></ol><figcaption>时间一天天过去</figcaption></figure>
+<p class="line reveal" data-src="9">有一天，大约是中秋前的两三天，掌柜正在慢慢的结帐，取下粉板，忽然说：『<span class="utt" data-sp="boss" title="掌柜">孔乙己长久没有来了。还欠十九个钱呢！</span>』我才也觉得他的确长久没有来了。一个喝酒的人说道，『<span class="utt" data-sp="drinker" title="一个喝酒的人">他怎么会来？……他打折了腿了。</span>』掌柜说：『<span class="utt" data-sp="boss" title="掌柜">哦！</span>』『<span class="utt" data-sp="drinker" title="一个喝酒的人">他总仍旧是偸。这一回，是自己发昏，竟偸到丁举人家里去了。他家的东西，偸得的么？</span>』『<span class="utt" data-sp="boss" title="掌柜">后来怎么样？</span>』『<span class="utt" data-sp="drinker" title="一个喝酒的人">怎么样？先写服辩，后来是打，打了大半夜，再打折了腿。</span>』『<span class="utt" data-sp="boss" title="掌柜">后来呢？</span>』『<span class="utt" data-sp="drinker" title="一个喝酒的人">后来打折了腿了。</span>』『打折了怎样呢？』『怎样？……谁晓得？许是死了。』掌柜也不再问，仍然慢慢的算他的帐。</p>
+<figure class="fig c-ledger reveal" aria-hidden="true"><div class="board"><div class="row ">孔乙己 欠十九个钱</div></div><figcaption>粉板上的欠账</figcaption></figure></div></section>
+<section class="scene tone-dim" id="s6"><div class="col"><div class="marker reveal" aria-hidden="true"><span>06</span>门槛温酒<small>初冬下半天 · 咸亨酒店门槛</small></div>
+<p class="line say reveal" data-src="10" data-sp="kongyiji" data-spn="孔乙己">中秋过后，秋风是一天凉比一天，看看将近初冬；我整天的靠着火，也须穿上棉袄了。一天的下半天，没有一个顾客，我正合了眼坐着。忽然间听得一个声音，『温一碗酒。』这声音虽然极低，却很耳熟。看时又全没有人。站起来向外一望，那孔乙己便在柜台下对了门槛坐着。他脸上黑而且瘦，已经不成样子；穿一件破夹袄，盘着两腿，下面垫一个蒲包，用草绳在肩上挂住；见了我，又说道，『温一碗酒。』掌柜也伸出头去，一面说：『孔乙己么？你还欠十九个钱呢！』孔乙己很颓唐的仰面答道，『这……下回还清罢。这一回是现钱，酒要好。』掌柜仍然同平常一样，笑着对他说，『孔乙己，你又偸了东西了！』但他这回却不十分分辩，单说了一句『不要取笑！』『取笑？要是不偸，怎么会打断腿？』孔乙己低声说道：『跌断，跌，跌……』他的眼色，很像恳求掌柜，不要再提。此时已经聚集了几个人，便和掌柜都笑了。我温了酒，端出去，放在门槛上。他从破衣袋里摸出四文大钱，放在我手里，见他满手是泥，原来他便用这手走来的。不一会，他喝完酒，便又在旁人的说笑声中，坐着用这手慢慢走去了。</p>
+<figure class="fig c-object reveal" aria-hidden="true"><svg viewBox="0 0 120 120" class="ink"><g class="drop" style="animation-delay:0.0s"><ellipse cx="60" cy="92" rx="22" ry="7" class="fillc"/><rect x="56" y="89" width="8" height="5"/></g><g class="drop" style="animation-delay:0.25s"><ellipse cx="60" cy="83" rx="22" ry="7" class="fillc"/><rect x="56" y="80" width="8" height="5"/></g><g class="drop" style="animation-delay:0.5s"><ellipse cx="60" cy="74" rx="22" ry="7" class="fillc"/><rect x="56" y="71" width="8" height="5"/></g><g class="drop" style="animation-delay:0.75s"><ellipse cx="60" cy="65" rx="22" ry="7" class="fillc"/><rect x="56" y="62" width="8" height="5"/></g></svg><figcaption>满手是泥摸出四文钱</figcaption></figure></div></section>
+<section class="scene tone-memory" id="s7"><div class="col"><div class="marker reveal" aria-hidden="true"><span>07</span>粉板欠账<small>年关至如今 · 咸亨酒店</small></div>
+<p class="line say reveal" data-src="11" data-sp="boss" data-spn="掌柜">自此以后，又长久没有看见孔乙己。到了年关，掌柜取下粉板说：『孔乙己还欠十九个钱呢！』到第二年的端午，又说：『孔乙己还欠十九个钱呢！』到中秋可是没有说，再到年关也没有看见他。</p>
+<p class="line reveal" data-src="12">我到现在终于没有见——大约孔乙己的确死了。</p>
+<p class="line reveal" data-src="13">（一九一九年三月。）</p>
+<div class="fin reveal" aria-hidden="true">· · ·</div></div></section>
+</main>
+<script>
+const STATE = {"key": "7a595921e29a", "defaultTheme": "paper", "scenes": [{"name": "柜台温酒", "time": "二十多年间", "place": "咸亨酒店"}, {"name": "哄笑窃书", "time": "日常", "place": "咸亨酒店"}, {"name": "教写茴字", "time": "日常", "place": "咸亨酒店"}, {"name": "没有他也过", "time": "日常", "place": "咸亨酒店"}, {"name": "打折了腿", "time": "中秋前两三天", "place": "咸亨酒店"}, {"name": "门槛温酒", "time": "初冬下半天", "place": "咸亨酒店门槛"}, {"name": "粉板欠账", "time": "年关至如今", "place": "咸亨酒店"}], "chars": [{"id": "narrator", "name": "我", "color": "#4a6fa5", "night": "#6486b9"}, {"id": "kongyiji", "name": "孔乙己", "color": "#6b8e23", "night": "#6b8e23"}, {"id": "boss", "name": "掌柜", "color": "#8b4513", "night": "#c76823"}, {"id": "shorts", "name": "短衣帮", "color": "#2b4a6f", "night": "#5786be"}, {"id": "longs", "name": "长衫主顾", "color": "#483d8b", "night": "#877dc6"}, {"id": "kids", "name": "邻舍孩子", "color": "#a3253c", "night": "#d95a71"}, {"id": "drinker", "name": "一个喝酒的人", "color": "#3f6b4f", "night": "#56926b"}], "focal": ["narrator", "kongyiji"], "paras": [{"s": 0, "sp": "", "pr": ["narrator", "shorts", "longs"], "in": 0.5, "te": 0.1, "bl": 0.0, "bw": ""}, {"s": 0, "sp": "", "pr": ["narrator", "boss", "shorts"], "in": 0.5, "te": 0.2, "bl": 0.0, "bw": ""}, {"s": 0, "sp": "", "pr": ["narrator", "boss", "kongyiji"], "in": 0.5, "te": 0.3, "bl": 0.0, "bw": ""}, {"s": 1, "sp": "drinker", "pr": ["narrator", "kongyiji", "shorts", "drinker"], "in": 0.2, "te": 0.8, "bl": 0.95, "bw": "kongyiji"}, {"s": 1, "sp": "", "pr": ["narrator", "kongyiji"], "in": 0.3, "te": 0.1, "bl": 0.0, "bw": ""}, {"s": 1, "sp": "drinker", "pr": ["narrator", "kongyiji", "shorts", "drinker"], "in": 0.2, "te": 0.7, "bl": 0.6, "bw": "kongyiji"}, {"s": 2, "sp": "kongyiji", "pr": ["narrator", "kongyiji", "boss"], "in": 0.45, "te": 0.3, "bl": 0.1, "bw": ""}, {"s": 2, "sp": "kongyiji", "pr": ["kongyiji", "kids"], "in": 0.5, "te": 0.2, "bl": 0.0, "bw": ""}, {"s": 3, "sp": "", "pr": ["narrator"], "in": 0.3, "te": 0.1, "bl": 0.0, "bw": ""}, {"s": 4, "sp": "drinker", "pr": ["narrator", "boss", "drinker"], "in": 0.2, "te": 0.5, "bl": 0.0, "bw": ""}, {"s": 5, "sp": "kongyiji", "pr": ["narrator", "boss", "kongyiji", "shorts"], "in": 0.55, "te": 0.7, "bl": 0.5, "bw": "kongyiji"}, {"s": 6, "sp": "boss", "pr": ["narrator", "boss"], "in": 0.1, "te": 0.1, "bl": 0.0, "bw": ""}, {"s": 6, "sp": "", "pr": ["narrator"], "in": 0.1, "te": 0.2, "bl": 0.0, "bw": ""}, {"s": 6, "sp": "", "pr": ["narrator"], "in": 0.1, "te": 0.0, "bl": 0.0, "bw": ""}]};
+document.body.classList.remove('no-js'); document.documentElement.classList.add('js');
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const LS = 'vibereading:' + STATE.key;
+const store = { get(k, d){ try { const v = localStorage.getItem(LS + ':' + k); return v === null ? d : JSON.parse(v); } catch(e){ return d; } },
+                set(k, v){ try { localStorage.setItem(LS + ':' + k, JSON.stringify(v)); } catch(e){} } };
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- theme + speaker toggles ---------- */
+function setTheme(t){ document.body.classList.toggle('theme-night', t === 'night'); $('#bTheme').setAttribute('aria-pressed', t === 'night'); store.set('theme', t); }
+setTheme(store.get('theme', STATE.defaultTheme));
+$('#bTheme').onclick = $('#mTheme').onclick = () => setTheme(document.body.classList.contains('theme-night') ? 'paper' : 'night');
+function setSp(on){ document.body.classList.toggle('no-sp', !on); $('#bSp').setAttribute('aria-pressed', on); store.set('sp', on); }
+setSp(store.get('sp', true)); $('#bSp').onclick = () => setSp(document.body.classList.contains('no-sp'));
+
+/* ---------- toc ---------- */
+const toc = $('#toc'), scrim = $('#scrim');
+function openToc(o){ toc.classList.toggle('open', o); scrim.classList.toggle('on', o); }
+$('#bToc').onclick = $('#mToc').onclick = () => openToc(true); scrim.onclick = () => openToc(false);
+addEventListener('keydown', e => { if (e.key === 'Escape') openToc(false); });
+$$('.toc a').forEach(a => a.addEventListener('click', () => openToc(false)));
+
+/* ---------- ink draw-on + reveal ---------- */
+if (!reduce) $$('.draw .ink :is(path,rect,line,circle,ellipse,polyline)').forEach(el => {
+  try { const L = Math.ceil(el.getTotalLength()) + 1; el.style.strokeDasharray = L; el.style.strokeDashoffset = L;
+  el.style.transition = 'stroke-dashoffset 2.2s cubic-bezier(0.25,1,0.5,1)'; } catch(e){}
+});
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting){
+  e.target.classList.add('visible');
+  e.target.querySelectorAll('.ink :is(path,rect,line,circle,ellipse,polyline)').forEach(el => el.style.strokeDashoffset = 0);
+  io.unobserve(e.target); } }), { threshold: 0.12 });
+$$('.reveal').forEach(el => io.observe(el));
+
+/* ---------- particles: hero dust + window weather (only while on screen) ---------- */
+function particles(cv, kind){
+  const ctx = cv.getContext('2d'); let W = 0, H = 0, on = false, ps = [];
+  const N = {dust:46, rain:70, snow:60, wind:18, night:40, clear:0, fog:0}[kind] || 0; if (!N) return;
+  function size(){ W = cv.width = cv.offsetWidth * devicePixelRatio; H = cv.height = cv.offsetHeight * devicePixelRatio; }
+  size(); addEventListener('resize', size);
+  for (let i = 0; i < N; i++) ps.push({x:Math.random(), y:Math.random(), r:Math.random()*1.6+.4, v:Math.random()*.0003+.0001, p:Math.random()*6});
+  new IntersectionObserver(e => on = e[0].isIntersecting).observe(cv);
+  const d = devicePixelRatio;
+  (function loop(t){
+    if (on && W){ ctx.clearRect(0,0,W,H);
+      for (const p of ps){
+        if (kind === 'dust'){ p.y -= p.v; p.x += Math.sin(t/3000+p.p)*.00012; if (p.y < 0) p.y = 1;
+          ctx.beginPath(); ctx.arc(p.x*W, p.y*H, p.r*d, 0, 7); ctx.fillStyle = 'rgba(196,150,80,'+(.18+.15*Math.sin(t/900+p.p))+')'; ctx.fill(); }
+        else if (kind === 'rain'){ p.y += p.v*28; p.x -= p.v*4; if (p.y > 1){ p.y = 0; p.x = Math.random()*1.1; }
+          ctx.strokeStyle = 'rgba(90,110,130,.35)'; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(p.x*W, p.y*H); ctx.lineTo(p.x*W - 2*d, p.y*H + 12*d); ctx.stroke(); }
+        else if (kind === 'snow' || kind === 'night'){ p.y += p.v*(kind==='snow'?3:0); p.x += Math.sin(t/1600+p.p)*.0004; if (p.y > 1) p.y = 0;
+          ctx.beginPath(); ctx.arc(p.x*W, p.y*H, p.r*d*(kind==='snow'?1.4:.7), 0, 7);
+          ctx.fillStyle = kind==='snow' ? 'rgba(255,255,255,.9)' : 'rgba(255,248,220,'+(.3+.4*Math.sin(t/700+p.p))+')'; ctx.fill(); }
+        else if (kind === 'wind'){ p.x += p.v*9; p.y += Math.sin(t/500+p.p)*.002; if (p.x > 1.05){ p.x = -.05; p.y = Math.random(); }
+          ctx.save(); ctx.translate(p.x*W, p.y*H); ctx.rotate(t/400+p.p); ctx.fillStyle = 'rgba(160,110,50,.55)';
+          ctx.beginPath(); ctx.ellipse(0,0,5*d,2.2*d,0,0,7); ctx.fill(); ctx.restore(); }
+      } }
+    requestAnimationFrame(loop);
+  })(0);
+}
+if (!reduce){ const du = $('#dust'); if (du) particles(du, 'dust'); $$('canvas[data-weather]').forEach(c => particles(c, c.dataset.weather)); }
+
+/* ---------- reading state: scene label, rail, overlays, progress, position ---------- */
+const lines = $$('[data-src]').filter(e => !e.closest('.notes'));
+const scenes = $$('section.scene');
+let tops = [], cur = -1;
+function measure(){ tops = lines.map(e => e.getBoundingClientRect().top + scrollY); }
+measure(); addEventListener('resize', () => { measure(); pick(); }); addEventListener('load', () => { measure(); pick(); });
+if (document.fonts) document.fonts.ready.then(() => { measure(); pick(); });
+const ST = STATE.paras, CH = STATE.chars, cmap = Object.fromEntries(CH.map(c => [c.id, c]));
+const target = {st: ST[0]};
+const legend = $('#legend'); function paintLegend(){ const n = document.body.classList.contains('theme-night'); legend.innerHTML = CH.map(c => `<span><i style="background:${n ? c.night : c.color}"></i>${c.name}</span>`).join(''); }
+paintLegend(); $('#bTheme').addEventListener('click', paintLegend); $('#mTheme').addEventListener('click', paintLegend);
+let lastSave = 0;
+function pick(){
+  const y = scrollY + innerHeight * 0.5;
+  let lo = 0, hi = tops.length - 1, k = 0;
+  while (lo <= hi){ const m = (lo + hi) >> 1; if (tops[m] < y){ k = m; lo = m + 1; } else hi = m - 1; }
+  const el = lines[k], idx = +el.dataset.src;
+  if (cur !== idx){ const p = lines.find(e => e.classList.contains('cur')); if (p) p.classList.remove('cur'); el.classList.add('cur'); cur = idx; }
+  const st = ST[idx], sc = STATE.scenes[st.s];
+  const past = scrollY > innerHeight * 0.6;
+  $('#rail').classList.toggle('on', past); $('#topbar').classList.toggle('on', past);
+  // darkness is decided by what is actually behind the rail / top bar, not by the paragraph being read
+  const under = (x, y) => { const e = document.elementFromPoint(x, y); return !!(e && e.closest('.tone-night,.night-band')); };
+  $('#rail').classList.toggle('dark', under(30, innerHeight / 2) && !document.body.classList.contains('theme-night'));
+  $('#topbar').classList.toggle('dark', under(innerWidth / 2, 60));
+  $('#sName').textContent = $('#mName').textContent = sc.name;
+  $('#sSub').textContent = $('#mSub').textContent = [sc.time, sc.place].filter(Boolean).join(' · ');
+  const bw = st.bl > 0.35 && st.bw ? cmap[st.bw] : null;
+  $('#status').innerHTML = bw ? `<b>●</b> ${bw.name} · 脸红` : (st.te > 0.6 ? '· 气氛紧绷' : '');
+  $('#ovBlush').style.opacity = st.bl > 0.3 ? Math.min(.8, (st.bl - 0.2) * 1.0) : 0;
+  $('#ovPress').style.opacity = st.te > 0.45 ? Math.min(.85, (st.te - 0.45) * 1.9) : 0;
+  const doc = document.documentElement.scrollHeight - innerHeight, pct = Math.max(0, Math.min(100, scrollY / doc * 100));
+  $('#progress').style.width = pct + '%'; $('#tocPct').textContent = Math.round(pct) + '%';
+  $$('.toc li.cur').forEach(l => l.classList.remove('cur')); const tl = $(`.toc li[data-s="${st.s}"]`); if (tl) tl.classList.add('cur');
+  const now = Date.now(); if (past && now - lastSave > 800){ store.set('pos', idx); lastSave = now; }
+  target.st = st;
+}
+addEventListener('scroll', () => requestAnimationFrame(pick), {passive:true});
+
+/* resume */
+(function(){
+  const pos = store.get('pos', 0);
+  if (pos > 2 && !location.hash){
+    const el = $(`[data-src="${pos}"]`); if (!el) return;
+    const sc = STATE.scenes[ST[pos].s];
+    $('#toastText').textContent = `上次读到「${sc.name}」· 第 ${pos + 1} 段`;
+    $('#toast').classList.add('on');
+    $('#toastGo').onclick = () => { $('#toast').classList.remove('on'); el.scrollIntoView({block:'center'}); el.classList.add('flash'); };
+    $('#toastX').onclick = () => $('#toast').classList.remove('on');
+    setTimeout(() => $('#toast').classList.remove('on'), 9000);
+  }
+})();
+$$('a.fn-ref, a.fn-back').forEach(a => a.addEventListener('click', () => { const t = $(a.getAttribute('href')); if (t){ setTimeout(() => { t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash'); }, 300); } }));
+
+/* ---------- relation canvas (desktop rail + mobile topbar) ---------- */
+const anim = {in: 0, bl: 0, te: 0, a: {}};
+CH.forEach(c => anim.a[c.id] = 0);
+const FP = STATE.focal;
+function drawCanvas(cv, t, mini){
+  const cx = cv.getContext('2d'), w = cv.clientWidth, h = cv.clientHeight, d = devicePixelRatio;
+  if (!w) return;
+  if (cv.width !== Math.round(w*d)){ cv.width = Math.round(w*d); cv.height = Math.round(h*d); }
+  cx.setTransform(d,0,0,d,0,0); cx.clearRect(0,0,w,h);
+  const night = document.body.classList.contains('theme-night') || $('#rail').classList.contains('dark') || (mini && $('#topbar').classList.contains('dark'));
+  const ink = night ? '#e6e1d8' : '#1a1a1a', r = mini ? 7 : 8.5;
+  const st = target.st, mid = w/2, cy = mini ? h*0.5 : h*0.4;
+  const gap = (mini ? 10 : 14) + (1 - anim.in) * (w * (mini ? 0.3 : 0.3));
+  const pos = {};
+  if (FP.length === 2){ pos[FP[0]] = {x: mid - gap, y: cy}; pos[FP[1]] = {x: mid + gap, y: cy}; }
+  else if (FP.length === 1){ pos[FP[0]] = {x: mid, y: cy}; }
+  const others = CH.filter(c => !(c.id in pos));
+  others.forEach((c, i) => {
+    const n = others.length, a = Math.PI * (1 + (i + 1) / (n + 1));
+    const sp = Math.min(56, (w - 40) / Math.max(1, n));
+    pos[c.id] = mini ? {x: mid + (i - (n-1)/2) * 16, y: 8} : {x: mid + (i - (n-1)/2) * sp, y: h * 0.8};
+  });
+  // thread between the focal pair
+  if (FP.length === 2){
+    const A = pos[FP[0]], B = pos[FP[1]], vis = Math.min(anim.a[FP[0]], anim.a[FP[1]]);
+    if (vis > .2){
+      const sag = (1 - anim.in) * h * (mini ? .25 : .3), trem = Math.pow(anim.in, 3) * 2.4 * Math.sin(t/38);
+      cx.beginPath(); cx.moveTo(A.x, A.y); cx.quadraticCurveTo(mid, cy + sag + trem, B.x, B.y);
+      cx.strokeStyle = night ? `rgba(230,225,216,${(.2 + anim.in*.6)*vis})` : `rgba(80,60,60,${(.18 + anim.in*.6)*vis})`;
+      cx.lineWidth = 1 + anim.in * 1.3; cx.setLineDash(anim.te > .55 ? [3,3] : []); cx.stroke(); cx.setLineDash([]);
+    }
+  }
+  for (const c of CH){
+    const a = anim.a[c.id]; if (a < .03) continue;
+    const p = pos[c.id], isFocal = FP.includes(c.id), rr = isFocal ? r : r * .75;
+    if (!isFocal && mini) { cx.globalAlpha = a; cx.beginPath(); cx.arc(p.x, p.y, 3.2, 0, 7); cx.fillStyle = night ? c.night : c.color; cx.fill(); cx.globalAlpha = 1; continue; }
+    // blush: a pulsing coral halo, never a colour change of the dot itself
+    if (st.bw === c.id && anim.bl > .25){
+      const pulse = 1 + .12 * Math.sin(t/260), R = rr * (2.1 + anim.bl) * pulse;
+      const g = cx.createRadialGradient(p.x, p.y, rr * .8, p.x, p.y, R);
+      g.addColorStop(0, `rgba(255,106,61,${.75*anim.bl})`); g.addColorStop(1, 'rgba(255,106,61,0)');
+      cx.fillStyle = g; cx.beginPath(); cx.arc(p.x, p.y, R, 0, 7); cx.fill();
+    }
+    cx.globalAlpha = a; cx.beginPath(); cx.arc(p.x, p.y, rr, 0, 7); cx.fillStyle = night ? c.night : c.color; cx.fill();
+    if (st.sp === c.id){ cx.beginPath(); cx.arc(p.x, p.y, rr + 3.5, 0, 7); cx.strokeStyle = night ? c.night : c.color; cx.lineWidth = 1.2; cx.stroke(); }
+    if (!mini){
+      cx.fillStyle = ink; cx.font = '12px serif'; cx.textAlign = 'center';
+      const ly = isFocal ? p.y - rr - 7 : p.y + rr + 14;
+      cx.fillText(c.name.length > 4 ? c.name.slice(0,4) : c.name, p.x, ly);
+    } else { cx.fillStyle = '#fff'; cx.font = 'bold 9px sans-serif'; cx.textAlign = 'center'; cx.fillText(c.name[0], p.x, p.y + 3.2); }
+    cx.globalAlpha = 1;
+  }
+}
+function frame(t){
+  const st = target.st;
+  anim.in += (st.in - anim.in) * .05; anim.bl += (st.bl - anim.bl) * .06; anim.te += (st.te - anim.te) * .06;
+  for (const c of CH){ const want = st.pr.includes(c.id) ? 1 : (FP.includes(c.id) ? .15 : 0); anim.a[c.id] += (want - anim.a[c.id]) * .07; }
+  if ($('#rail').classList.contains('on')) drawCanvas($('#thread'), t, false);
+  if ($('#topbar').classList.contains('on')) drawCanvas($('#mThread'), t, true);
+  requestAnimationFrame(frame);
+}
+pick(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>

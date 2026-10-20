@@ -1,0 +1,527 @@
+{
+ "meta": {
+  "title": "孔乙己",
+  "author": "鲁迅",
+  "work": "呐喊",
+  "subtitle": "鲁镇咸亨酒店 · 小伙计 · 孔乙己",
+  "hero_motif": "door",
+  "hero_segments": []
+ },
+ "characters": [
+  {
+   "id": "narrator",
+   "name": "我",
+   "aliases": [
+    "伙计"
+   ],
+   "color": "#4A6FA5"
+  },
+  {
+   "id": "kongyiji",
+   "name": "孔乙己",
+   "aliases": [
+    "他"
+   ],
+   "color": "#6B8E23"
+  },
+  {
+   "id": "boss",
+   "name": "掌柜",
+   "aliases": [],
+   "color": "#8B4513"
+  },
+  {
+   "id": "shorts",
+   "name": "短衣帮",
+   "aliases": [
+    "做工的人",
+    "喝酒的人",
+    "众人"
+   ],
+   "color": "#556B2F"
+  },
+  {
+   "id": "longs",
+   "name": "长衫主顾",
+   "aliases": [],
+   "color": "#483D8B"
+  },
+  {
+   "id": "kids",
+   "name": "邻舍孩子",
+   "aliases": [
+    "孩子们"
+   ],
+   "color": "#CD853F"
+  },
+  {
+   "id": "drinker",
+   "name": "一个喝酒的人",
+   "aliases": [],
+   "color": "#708090"
+  }
+ ],
+ "focal_pair": [
+  "narrator",
+  "kongyiji"
+ ],
+ "scenes": [
+  {
+   "start": 0,
+   "end": 2,
+   "name": "柜台温酒",
+   "time": "二十多年间",
+   "place": "咸亨酒店",
+   "tone": "day"
+  },
+  {
+   "start": 3,
+   "end": 5,
+   "name": "哄笑窃书",
+   "time": "日常",
+   "place": "咸亨酒店",
+   "tone": "day"
+  },
+  {
+   "start": 6,
+   "end": 7,
+   "name": "教写茴字",
+   "time": "日常",
+   "place": "咸亨酒店",
+   "tone": "day"
+  },
+  {
+   "start": 8,
+   "end": 8,
+   "name": "没有他也过",
+   "time": "日常",
+   "place": "咸亨酒店",
+   "tone": "day"
+  },
+  {
+   "start": 9,
+   "end": 9,
+   "name": "打折了腿",
+   "time": "中秋前两三天",
+   "place": "咸亨酒店",
+   "tone": "dim"
+  },
+  {
+   "start": 10,
+   "end": 10,
+   "name": "门槛温酒",
+   "time": "初冬下半天",
+   "place": "咸亨酒店门槛",
+   "tone": "dim"
+  },
+  {
+   "start": 11,
+   "end": 13,
+   "name": "粉板欠账",
+   "time": "年关至如今",
+   "place": "咸亨酒店",
+   "tone": "memory"
+  }
+ ],
+ "paras": [
+  {
+   "sp": "",
+   "pr": [
+    "narrator",
+    "shorts",
+    "longs"
+   ],
+   "in": 0.5,
+   "te": 0.1,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "",
+   "pr": [
+    "narrator",
+    "boss",
+    "shorts"
+   ],
+   "in": 0.5,
+   "te": 0.2,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "",
+   "pr": [
+    "narrator",
+    "boss",
+    "kongyiji"
+   ],
+   "in": 0.5,
+   "te": 0.3,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "drinker",
+   "pr": [
+    "narrator",
+    "kongyiji",
+    "shorts",
+    "drinker"
+   ],
+   "in": 0.2,
+   "te": 0.8,
+   "bl": 0.95,
+   "bw": "kongyiji"
+  },
+  {
+   "sp": "",
+   "pr": [
+    "narrator",
+    "kongyiji"
+   ],
+   "in": 0.3,
+   "te": 0.1,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "drinker",
+   "pr": [
+    "narrator",
+    "kongyiji",
+    "shorts",
+    "drinker"
+   ],
+   "in": 0.2,
+   "te": 0.7,
+   "bl": 0.6,
+   "bw": "kongyiji"
+  },
+  {
+   "sp": "kongyiji",
+   "pr": [
+    "narrator",
+    "kongyiji",
+    "boss"
+   ],
+   "in": 0.45,
+   "te": 0.3,
+   "bl": 0.1,
+   "bw": ""
+  },
+  {
+   "sp": "kongyiji",
+   "pr": [
+    "kongyiji",
+    "kids"
+   ],
+   "in": 0.5,
+   "te": 0.2,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "",
+   "pr": [
+    "narrator"
+   ],
+   "in": 0.3,
+   "te": 0.1,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "drinker",
+   "pr": [
+    "narrator",
+    "boss",
+    "drinker"
+   ],
+   "in": 0.2,
+   "te": 0.5,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "kongyiji",
+   "pr": [
+    "narrator",
+    "boss",
+    "kongyiji",
+    "shorts"
+   ],
+   "in": 0.55,
+   "te": 0.7,
+   "bl": 0.5,
+   "bw": "kongyiji"
+  },
+  {
+   "sp": "boss",
+   "pr": [
+    "narrator",
+    "boss"
+   ],
+   "in": 0.1,
+   "te": 0.1,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "",
+   "pr": [
+    "narrator"
+   ],
+   "in": 0.1,
+   "te": 0.2,
+   "bl": 0.0,
+   "bw": ""
+  },
+  {
+   "sp": "",
+   "pr": [
+    "narrator"
+   ],
+   "in": 0.1,
+   "te": 0.0,
+   "bl": 0.0,
+   "bw": ""
+  }
+ ],
+ "utterances": [
+  {
+   "i": 1,
+   "q": "样子太儍，怕侍候不了长衫主顾，就在外面做点事罢。",
+   "sp": "boss"
+  },
+  {
+   "i": 3,
+   "q": "孔乙己，你脸上又添上新伤疤了！",
+   "sp": "drinker"
+  },
+  {
+   "i": 3,
+   "q": "温两碗酒，要一碟茴香豆。",
+   "sp": "kongyiji"
+  },
+  {
+   "i": 3,
+   "q": "你一定又偸了人家的东西了！",
+   "sp": "drinker"
+  },
+  {
+   "i": 3,
+   "q": "你怎么这样凭空污人清白……",
+   "sp": "kongyiji"
+  },
+  {
+   "i": 3,
+   "q": "什么清白？我前天亲眼见你偸了何家的书，吊着打。",
+   "sp": "drinker"
+  },
+  {
+   "i": 3,
+   "q": "窃书不能算偸……窃书！……读书人的事，能算偸么？",
+   "sp": "kongyiji"
+  },
+  {
+   "i": 5,
+   "q": "孔乙己，你当真认识字么？",
+   "sp": "drinker"
+  },
+  {
+   "i": 5,
+   "q": "你怎的连半个秀才也捞不到呢？",
+   "sp": "drinker"
+  },
+  {
+   "i": 6,
+   "q": "你读过书么？",
+   "sp": "kongyiji"
+  },
+  {
+   "i": 6,
+   "q": "读过书，……我便考你一考。茴香豆的茴字，怎样写的？",
+   "sp": "kongyiji"
+  },
+  {
+   "i": 6,
+   "q": "不能写罢？……我教给你，记着！这些字应该记着。将来做掌柜的时候，写帐要用。",
+   "sp": "kongyiji"
+  },
+  {
+   "i": 6,
+   "q": "谁要你教，不是草头底下一个来回的回字么？",
+   "sp": "narrator"
+  },
+  {
+   "i": 6,
+   "q": "对呀对呀！……回字有四样写法，你知道么？",
+   "sp": "kongyiji"
+  },
+  {
+   "i": 7,
+   "q": "不多了，我已经不多了。",
+   "sp": "kongyiji"
+  },
+  {
+   "i": 7,
+   "q": "不多不多！多乎哉？不多也。",
+   "sp": "kongyiji"
+  },
+  {
+   "i": 9,
+   "q": "孔乙己长久没有来了。还欠十九个钱呢！",
+   "sp": "boss"
+  },
+  {
+   "i": 9,
+   "q": "他怎么会来？……他打折了腿了。",
+   "sp": "drinker"
+  },
+  {
+   "i": 9,
+   "q": "哦！",
+   "sp": "boss"
+  },
+  {
+   "i": 9,
+   "q": "他总仍旧是偸。这一回，是自己发昏，竟偸到丁举人家里去了。他家的东西，偸得的么？",
+   "sp": "drinker"
+  },
+  {
+   "i": 9,
+   "q": "后来怎么样？",
+   "sp": "boss"
+  },
+  {
+   "i": 9,
+   "q": "怎么样？先写服辩，后来是打，打了大半夜，再打折了腿。",
+   "sp": "drinker"
+  },
+  {
+   "i": 9,
+   "q": "后来呢？",
+   "sp": "boss"
+  },
+  {
+   "i": 9,
+   "q": "后来打折了腿了。",
+   "sp": "drinker"
+  }
+ ],
+ "visuals": [
+  {
+   "at": 0,
+   "pos": "before",
+   "type": "interior",
+   "params": {
+    "room": "tavern",
+    "props": [
+     "counter",
+     "wine_jar",
+     "stove"
+    ],
+    "caption": "咸亨酒店曲尺形柜台"
+   }
+  },
+  {
+   "at": 0,
+   "pos": "after",
+   "type": "object",
+   "params": {
+    "thing": "coins",
+    "action": "none",
+    "caption": "四文铜钱买一碗酒"
+   }
+  },
+  {
+   "at": 3,
+   "pos": "after",
+   "type": "sound",
+   "params": {
+    "glyph": "笑",
+    "count": 8,
+    "caption": "店内外快活的空气"
+   }
+  },
+  {
+   "at": 3,
+   "pos": "after",
+   "type": "object",
+   "params": {
+    "thing": "bean_dish",
+    "action": "none",
+    "caption": "一碟茴香豆"
+   }
+  },
+  {
+   "at": 6,
+   "pos": "after",
+   "type": "silence",
+   "params": {
+    "length": "short"
+   }
+  },
+  {
+   "at": 9,
+   "pos": "before",
+   "type": "timeline",
+   "params": {
+    "labels": [
+     "中秋前",
+     "年关",
+     "端午",
+     "中秋",
+     "年关"
+    ],
+    "caption": "时间一天天过去"
+   }
+  },
+  {
+   "at": 9,
+   "pos": "after",
+   "type": "ledger",
+   "params": {
+    "entries": [
+     {
+      "text": "孔乙己 欠十九个钱",
+      "state": "written"
+     }
+    ],
+    "caption": "粉板上的欠账"
+   }
+  },
+  {
+   "at": 10,
+   "pos": "before",
+   "type": "window",
+   "params": {
+    "weather": "wind",
+    "view": "street",
+    "caption": "秋风一天凉比一天"
+   }
+  },
+  {
+   "at": 10,
+   "pos": "after",
+   "type": "object",
+   "params": {
+    "thing": "coins",
+    "action": "drop",
+    "caption": "满手是泥摸出四文钱"
+   }
+  }
+ ],
+ "quotes": [
+  {
+   "at": 3,
+   "text": "窃书不能算偸……窃书！……读书人的事，能算偸么？",
+   "w": 5
+  },
+  {
+   "at": 12,
+   "text": "我到现在终于没有见——大约孔乙己的确死了。",
+   "w": 5
+  }
+ ]
+}

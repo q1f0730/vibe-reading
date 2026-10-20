@@ -7,6 +7,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 def data_dir():
     d = pathlib.Path(os.environ.get("VR_DATA_DIR") or (ROOT / "data")).resolve()
+    if not d.exists():
+        d.mkdir(parents=True, mode=0o700)       # 原文与会话都在这里：只给服务用户自己读
     (d / "books").mkdir(parents=True, exist_ok=True)
     return d
 

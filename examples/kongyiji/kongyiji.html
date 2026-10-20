@@ -504,12 +504,13 @@ function drawCanvas(cv, t, mini){
   const pos = {};
   if (FP.length === 2){ pos[FP[0]] = {x: mid - gap, y: cy}; pos[FP[1]] = {x: mid + gap, y: cy}; }
   else if (FP.length === 1){ pos[FP[0]] = {x: mid, y: cy}; }
-  const others = CH.filter(c => !(c.id in pos));
+  // non-focal characters: lay out only those on stage (or still fading out), so labels never pile up
+  const others = CH.filter(c => !(c.id in pos) && (st.pr.includes(c.id) || anim.a[c.id] > .03));
+  const n = others.length, sp = Math.min(60, (w - 24) / Math.max(1, n)), tight = sp < 44;
   others.forEach((c, i) => {
-    const n = others.length, a = Math.PI * (1 + (i + 1) / (n + 1));
-    const sp = Math.min(56, (w - 40) / Math.max(1, n));
-    pos[c.id] = mini ? {x: mid + (i - (n-1)/2) * 16, y: 8} : {x: mid + (i - (n-1)/2) * sp, y: h * 0.8};
+    pos[c.id] = mini ? {x: mid + (i - (n-1)/2) * 16, y: 8} : {x: mid + (i - (n-1)/2) * sp, y: h * 0.8, tight};
   });
+  CH.forEach(c => { if (!pos[c.id]) pos[c.id] = {x: -99, y: -99}; });
   // thread between the focal pair
   if (FP.length === 2){
     const A = pos[FP[0]], B = pos[FP[1]], vis = Math.min(anim.a[FP[0]], anim.a[FP[1]]);
@@ -522,7 +523,7 @@ function drawCanvas(cv, t, mini){
   }
   for (const c of CH){
     const a = anim.a[c.id]; if (a < .03) continue;
-    const p = pos[c.id], isFocal = FP.includes(c.id), rr = isFocal ? r : r * .75;
+    const p = pos[c.id], isFocal = FP.includes(c.id), rr = isFocal ? r : (p.tight ? r * .95 : r * .75);
     if (!isFocal && mini) { cx.globalAlpha = a; cx.beginPath(); cx.arc(p.x, p.y, 3.2, 0, 7); cx.fillStyle = night ? c.night : c.color; cx.fill(); cx.globalAlpha = 1; continue; }
     // blush: a pulsing coral halo, never a colour change of the dot itself
     if (st.bw === c.id && anim.bl > .25){
@@ -536,7 +537,8 @@ function drawCanvas(cv, t, mini){
     if (!mini){
       cx.fillStyle = ink; cx.font = '12px serif'; cx.textAlign = 'center';
       const ly = isFocal ? p.y - rr - 7 : p.y + rr + 14;
-      cx.fillText(c.name.length > 4 ? c.name.slice(0,4) : c.name, p.x, ly);
+      if (p.tight){ cx.fillStyle = '#fff'; cx.font = 'bold 9px sans-serif'; cx.fillText(c.name[0], p.x, p.y + 3.2); }
+      else cx.fillText(c.name.length > 4 ? c.name.slice(0,4) : c.name, p.x, ly);
     } else { cx.fillStyle = '#fff'; cx.font = 'bold 9px sans-serif'; cx.textAlign = 'center'; cx.fillText(c.name[0], p.x, p.y + 3.2); }
     cx.globalAlpha = 1;
   }

@@ -2,9 +2,9 @@
 # 常驻启动上传服务。key 只从 ~/.config/vibereading.env（chmod 600，可选）读取，不出现在命令行/日志里。
 #   INCEPTION_API_KEY=...   # Mercury（快速，默认）
 #   DASHSCOPE_API_KEY=...   # 千问（质量）
-# 用法：scripts/serve.sh [port]   日志：server_out/server.log
+# 用法：scripts/serve.sh [port，默认 3000]   日志：server_out/server.log；数据：data/
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$DIR"
-PORT="${1:-8765}"
+PORT="${1:-3000}"
 ENVF="${VIBEREADING_ENV:-$HOME/.config/vibereading.env}"
 if [ -f "$ENVF" ]; then set -a; . "$ENVF"; set +a; fi
 PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python

@@ -31,7 +31,7 @@
 | 切分 | `vibereading/segment.py` | 一个非空行一段；硬换行+空行分段的文本自动按块合并；识别章节标题、日期行、文末脚注及其正文引用；自检"去空白后逐字相同" |
 | 规划 | `vibereading/planner.py` `registry.py` | 两步：outline（人物/场景）→ detail（逐段说话人、在场、亲密度/紧张/脸红、句内台词归属、组件节点、摘句），按场景分批并行；provider 可插拔 |
 | 渲染 | `vibereading/render.py` `components.py` `template.html` | 组件库 + 阅读器运行时；"编辑"规则去重、限密度、按优先级取舍 |
-| 入口 | `bin/vibereading`、`server.py` | CLI 与极简上传服务 |
+| 入口 | `bin/vibereading`、`server.py` + `vibereading/web/` | CLI；Web 服务（账号、SQLite 书架、持久化任务） |
 | 校验 | `tools/verify.js` `tools/shots.js` | puppeteer-core + 系统 Chromium |
 
 ## 阅读器功能
@@ -102,22 +102,67 @@ bin/vibereading build novel.txt -o out/novel.html --verify --shots
 每次输出：`novel.html`（阅读页）、`novel.plan.json`（分镜，可手改后 `--plan` 重渲染）、`novel.segments.json`（切分结果）、
 `novel.report.json`（耗时、调用次数、JSON 首次合格率、被跳过的组件、校验结果）。
 
-### 上传服务
+## Web 服务：账号 + 书架
 
 ```bash
+python3 scripts/init_db.py                          # 建库 / 迁移（幂等；服务启动时也会自动迁移）
 python3 server.py --host 127.0.0.1 --port 8765      # 打开 http://127.0.0.1:8765
 ```
 
-常驻运行（自动读取 `~/.config/vibereading.env` 里的 key，日志在 `server_out/server.log`）：
+| 页面 | 说明 |
+|---|---|
+| `/` | 产品一句话 + 公开示例《孔乙己》入口 + 上传（未登录时上传区锁定） |
+| `/login` `/register` | 用户名或邮箱 + 密码 |
+| `/shelf` | 我的书架：标题 / 字数 / 段数 / 校验结果 / 生成时间 / 状态；打开、重新生成（沿用分镜重渲染 或 重新规划）、分享链接、删除；底部可注销账号 |
+| `/jobs/<id>` | 生成进度（暗房风）：切分 → 规划 → 渲染 → 校验 四步 + 实时日志 + 时间码 |
+| `/b/<id>` | 阅读页。私密书只有本人能看（别人 403）；开启"链接可见"后拿到链接的人可读 |
+| `/sample/kongyiji` | 公开示例，无需登录 |
+
+- **登录**：密码用 scrypt（N=2^15, r=8, p=1, 16 字节随机盐）哈希；会话 token 只在 `HttpOnly; SameSite=Lax` cookie 里，
+  库里只存它的 sha256；HTTPS 下（`X-Forwarded-Proto: https` 或 `VR_COOKIE_SECURE=1`）自动加 `Secure`。
+  登录失败限速：同一账号 15 分钟 5 次、同一 IP 15 分钟 20 次，超过返回 429；注册同一 IP 每小时 10 个。
+  所有写操作只接受 `application/json`（挡跨站表单 CSRF），并拒绝 `Sec-Fetch-Site: cross-site`。
+- **生成需要登录**（防止别人消耗服务器上的模型 key）；每个用户同时只能有 1 个任务，全站并发 `VR_MAX_JOBS`（默认 2）。
+- **没有 key 时**：上传页自动切到"上传 plan.json"模式；书架里"沿用分镜，重新渲染"也不需要 key。
+- 阅读页带 CSP `connect-src 'none'`：生成的页面不能发起任何网络请求。
+- 前端零外部请求：系统中文字体栈、内联 SVG 噪点，无 CDN。
+
+### 数据库
+
+SQLite 单文件，默认在 `<仓库>/data/vibereading.db`（`VR_DATA_DIR` 可改；`data/` 与 `*.db` 已在 `.gitignore`）。
+生成的阅读页 / 分镜 / 报告在 `data/books/<book_id>/`。迁移在 `vibereading/web/db.py` 的 `MIGRATIONS`（`PRAGMA user_version` 记版本，只追加）。
+
+| 表 | 内容 |
+|---|---|
+| `users` | 用户名（大小写不敏感唯一）、可选邮箱、scrypt 哈希 |
+| `sessions` | sha256(token)、用户、过期时间（30 天）、IP / UA |
+| `books` | 标题、作者、原文、字数、段数、分镜 JSON、HTML 路径、模型、主题、状态 queued/running/done/failed、可见性 private/unlisted、校验结果、耗时、时间 |
+| `jobs` | 任务类型 build/replan/rerender、状态、阶段、进度、日志（JSON 数组）、错误、时间。**服务重启时未完成的任务标为失败** |
+| `login_attempts` | 限速计数（24 小时后清理） |
+
+### 测试
 
 ```bash
-scripts/serve.sh 8765
+python3 -m unittest tests.test_web -v
 ```
 
-或用 systemd --user 托管（见 `scripts/vibereading.service` 顶部注释）。
+真实起服务（临时数据目录、去掉模型 key）跑：注册/登录/退出、密码哈希、登录限速 429、CSRF、未登录不能生成、无 key 必须 plan.json、
+plan.json 生成 + 原文校验 14/14、别人访问/删除/重生成/改可见性 403、重启后书架与会话仍在且中断任务标为失败、注销账号连带删除书。
+界面截图：`node tools/ui_shots.js http://127.0.0.1:8765 out/ui-shots`（首页 / 登录 / 注册 / 书架 / 进度页，桌面 1440 + 手机 390）。
 
-上传 txt（自动识别 UTF-8 / GB18030）→ 选模型或上传 plan.json → 进度 → 自动打开阅读页。生成物在 `server_out/`。
-标准库实现，无需框架。
+## 部署（systemd --user）
+
+```bash
+git clone https://github.com/q1f0730/vibe-reading.git ~/vibe-reading && cd ~/vibe-reading
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && (cd tools && npm install)   # 校验需要系统 Chromium
+mkdir -p ~/.config/systemd/user && cp scripts/vibereading.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now vibereading      # 监听 0.0.0.0:3000
+```
+
+- key（可选）写在 `~/.config/vibereading.env`（`chmod 600`），单元文件用 `EnvironmentFile` 读取，不会出现在命令行或日志里。
+- 更新：`git pull && systemctl --user restart vibereading`（`ExecStartPre` 会自动跑数据库迁移）。
+- 放在反代 / HTTPS 后面时保持 `X-Forwarded-Proto` 与 `X-Forwarded-For` 头，cookie 会自动加 `Secure`，限速按真实 IP 计。
+- 也可以不用 systemd：`scripts/serve.sh 3000`。
 
 ## 分镜 JSON
 

@@ -1,0 +1,18 @@
+# systemd --user 单元：开机/重启后自动运行上传服务。
+# 安装：mkdir -p ~/.config/systemd/user && cp scripts/vibereading.service ~/.config/systemd/user/
+#       （按需修改 WorkingDirectory）systemctl --user daemon-reload && systemctl --user enable --now vibereading
+#       sudo loginctl enable-linger "$USER"   # 未登录时也保持运行
+# key 放在 ~/.config/vibereading.env（chmod 600），本文件不含任何 key。
+[Unit]
+Description=VibeReading upload server
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/vibe-reading
+EnvironmentFile=-%h/.config/vibereading.env
+Environment=INSTABOX_HEADLESS=1
+ExecStart=%h/vibe-reading/.venv/bin/python server.py --host 0.0.0.0 --port 8765
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

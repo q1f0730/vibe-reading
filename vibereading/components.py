@@ -146,7 +146,8 @@ def stairs_memory(p, ctx):
 
 # ---------------------------------------------------------------- cards / ledger / timeline
 def stamp_cards(p, ctx):
-    cards = "".join(f'<div class="card"><small>{E(c.get("label", ""))}</small><b class="stamp">{E(c.get("value", ""))}</b></div>'
+    long_cls = lambda v: " long" if len(str(v)) > 4 else ""   # 名字类长印章缩小字号、允许换行
+    cards = "".join(f'<div class="card"><small>{E(c.get("label", ""))}</small><b class="stamp{long_cls(c.get("value", ""))}">{E(c.get("value", ""))}</b></div>'
                     for c in (p.get("cards") or [])[:3])
     return fig("c-stamp", cards, p)
 

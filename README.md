@@ -108,6 +108,12 @@ bin/vibereading build novel.txt -o out/novel.html --verify --shots
 python3 server.py --host 127.0.0.1 --port 8765      # 打开 http://127.0.0.1:8765
 ```
 
+常驻运行（自动读取 `~/.config/vibereading.env` 里的 key，日志在 `server_out/server.log`）：
+
+```bash
+scripts/serve.sh 8765
+```
+
 上传 txt（自动识别 UTF-8 / GB18030）→ 选模型或上传 plan.json → 进度 → 自动打开阅读页。生成物在 `server_out/`。
 标准库实现，无需框架。
 

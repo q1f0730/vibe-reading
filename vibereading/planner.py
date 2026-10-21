@@ -81,11 +81,14 @@ def _sleep_for(attempt, retry_after=None):
     return min(30.0, 2.0 * (2 ** attempt)) * (0.75 + 0.5 * (hash((attempt, time.time())) % 100) / 100)
 
 
-def chat(messages, model, max_tokens, stats, provider="qwen"):
-    """一次 LLM 调用。限流（429）/ 5xx / 网络超时在这里退避重试，不消耗"格式不合格重试"的次数。"""
+def chat(messages, model, max_tokens, stats, provider="qwen", json_mode=True, extra_override=None, timeout=None):
+    """一次 LLM 调用。限流（429）/ 5xx / 网络超时在这里退避重试，不消耗"格式不合格重试"的次数。
+    json_mode=False：自由文本输出（hero 动画模块）；extra_override 只作用于本次调用。"""
     cfg = PROVIDERS[provider]
     body = {"model": model, "messages": messages, cfg.get("max_key", "max_tokens"): max_tokens + cfg["reasoning_headroom"],
-            "response_format": {"type": "json_object"}, **cfg["extra"]}
+            **cfg["extra"], **(extra_override or {})}
+    if json_mode:
+        body["response_format"] = {"type": "json_object"}
     key = os.environ.get(cfg["key_env"]) or "injected-by-gateway"
     data = json.dumps(body).encode()
     for attempt in range(MAX_TRANSIENT + 1):
@@ -95,7 +98,7 @@ def chat(messages, model, max_tokens, stats, provider="qwen"):
         with _LLM_SEM:
             stats.calls += 1
             try:
-                with urllib.request.urlopen(req, timeout=cfg["timeout"]) as r:
+                with urllib.request.urlopen(req, timeout=timeout or cfg["timeout"]) as r:
                     d = json.loads(r.read())
                 break
             except urllib.error.HTTPError as e:

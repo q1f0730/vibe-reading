@@ -311,6 +311,20 @@ h2.line{font-family:var(--font-display);font-size:calc(1.9rem*var(--fs));letter-
   .c-timeline li{font-size:.72rem;letter-spacing:0}
   .c-ledger .board{min-width:0;padding:1rem 1.2rem}
 }
+
+/* ===================== HERO SCENES（关键场景动画：沙箱 iframe，滚动驱动） ===================== */
+.hs{position:relative;height:calc(var(--len,2) * 100vh);margin:3.5rem 0;width:min(860px,calc(100vw - 2.5rem));left:50%;transform:translateX(-50%)}
+.hs-stage{position:sticky;top:max(52px,calc(50vh - var(--hh) / 2 - 1.2rem));--hh:min(66vh,560px)}
+.hs-frame{height:var(--hh);position:relative;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);background:var(--bg)}
+.hs-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:transparent;color-scheme:normal}
+.hs-ph{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:var(--rule)}
+.hs figcaption{font-size:12.5px;letter-spacing:.08em;color:var(--text2);margin-top:.7rem;line-height:1.6;text-align:left}
+.hs figcaption b{font-weight:400;color:var(--text);letter-spacing:.16em;margin-right:.2em}
+.hs .hs-src{display:none}
+.night-band .hs-frame,.tone-night .hs-frame{border-color:var(--night-rule)}
+@media (min-width:1100px){.hs{width:min(860px,calc(100vw - 500px))}}
+@media (max-width:640px){.hs{width:calc(100vw - 1.5rem)}.hs-stage{--hh:min(56vh,440px)}}
+.hs.static{height:auto}.hs.static .hs-stage{position:relative;top:auto}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
   .js .reveal{opacity:1;transform:none}
@@ -381,7 +395,45 @@ function wire(root){
   });
   root.querySelectorAll('.reveal').forEach(el => io.observe(el));
   if (!reduce) root.querySelectorAll('canvas[data-weather]').forEach(c => particles(c, c.dataset.weather));
+  wireHeroes(root);
 }
+
+
+/* ---------- hero scenes: sandboxed iframes, scroll progress via postMessage ---------- */
+const HS = new Set();
+const hsIO = new IntersectionObserver(es => es.forEach(e => {
+  const el = e.target;
+  if (e.isIntersecting && !el._f){
+    let doc = ''; try { doc = JSON.parse(el.querySelector('.hs-src').textContent); } catch(x){ return; }
+    const f = document.createElement('iframe');
+    f.setAttribute('sandbox', 'allow-scripts'); f.setAttribute('aria-hidden', 'true'); f.setAttribute('tabindex', '-1');
+    f.setAttribute('title', 'scene animation'); f.setAttribute('loading', 'eager'); f.setAttribute('referrerpolicy', 'no-referrer');
+    f.srcdoc = doc; el._f = f; el._p = -1; f.addEventListener('load', () => { el._p = -1; hsTick(true); });
+    el.querySelector('.hs-frame').appendChild(f); HS.add(el);
+  }
+  el._near = e.isIntersecting;
+}), { rootMargin: '120% 0px' });
+function hsTheme(){ return document.body.classList.contains('theme-night') ? 'night' : 'paper'; }
+function hsTick(force){
+  const th = hsTheme(), vh = innerHeight;
+  HS.forEach(el => {
+    if (!el.isConnected){ HS.delete(el); return; }
+    if (!el._near && !force) return;
+    const r = el.getBoundingClientRect();
+    let p = reduce || el.classList.contains('static') ? 1 : Math.min(1, Math.max(0, -r.top / Math.max(1, r.height - vh * 0.75)));
+    if (!force && Math.abs(p - el._p) < 0.002 && el._th === th) return;
+    el._p = p; el._th = th;
+    try { el._f.contentWindow.postMessage({vrh: 1, p, theme: th}, '*'); } catch(x){}
+  });
+}
+function wireHeroes(root){ root.querySelectorAll('.hs').forEach(el => { if (reduce) el.classList.add('static'); hsIO.observe(el); }); }
+addEventListener('message', e => {   // 模块只能报错/报告，不能操作父页面
+  const d = e.data; if (!d || !d.vrh) return;
+  HS.forEach(el => { if (el._f && e.source === el._f.contentWindow && d.t === 'error') el.dataset.err = String(d.msg).slice(0, 120); });
+});
+addEventListener('scroll', () => requestAnimationFrame(() => hsTick(false)), {passive: true});
+addEventListener('resize', () => hsTick(true));
+new MutationObserver(() => hsTick(true)).observe(document.body, {attributes: true, attributeFilter: ['class']});
 
 /* ---------- particles: hero dust + window weather (only while on screen; stop once unmounted) ---------- */
 function particles(cv, kind){

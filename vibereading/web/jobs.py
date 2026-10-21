@@ -12,7 +12,7 @@ STEPS = [("segment", "切分", "Segment"), ("plan", "规划", "Plan"), ("render"
 STAGE_STEP = {"segment": "segment", "outline": "plan", "detail": "plan", "detail+": "plan", "plan": "plan",
               "cast": "plan", "chapters": "plan", "chapter+": "plan",
               "render": "render", "verify": "verify", "shots": "verify", "done": "done"}
-STAGE_PCT = {"segment": 6, "outline": 10, "cast": 12, "chapters": 14, "detail": 30, "plan": 62, "render": 80, "verify": 88, "shots": 95, "done": 100}
+STAGE_PCT = {"segment": 6, "outline": 10, "cast": 12, "chapters": 14, "detail": 30, "plan": 62, "hero": 64, "render": 80, "verify": 88, "shots": 95, "done": 100}
 
 
 def book_dir(book_id):
@@ -31,17 +31,17 @@ def active_job_for_user(user_id):
     return db.conn().execute("SELECT id FROM jobs WHERE user_id=? AND status IN ('queued','running')", (user_id,)).fetchone()
 
 
-def start(book_id, user_id, kind="build", plan=None, model=None, verify=True):
+def start(book_id, user_id, kind="build", plan=None, model=None, verify=True, hero=None, hero_max=2):
     """kind: build（首次）/ replan（重新调用 LLM 规划）/ rerender（沿用已有分镜重新渲染）。"""
     jid = secrets.token_urlsafe(9); now = time.time(); c = db.conn()
     c.execute("INSERT INTO jobs(id, book_id, user_id, kind, status, stage, pct, log, created_at, updated_at) "
               "VALUES(?,?,?,?, 'queued','queued',1,?,?,?)", (jid, book_id, user_id, kind, json.dumps(["排队中"], ensure_ascii=False), now, now))
     c.execute("UPDATE books SET status='queued', error=NULL, updated_at=? WHERE id=?", (now, book_id))
-    threading.Thread(target=_run, args=(jid, book_id, kind, plan, model, verify), daemon=True, name=f"job-{jid}").start()
+    threading.Thread(target=_run, args=(jid, book_id, kind, plan, model, verify, hero, hero_max), daemon=True, name=f"job-{jid}").start()
     return jid
 
 
-def _run(jid, book_id, kind, plan, model, verify):
+def _run(jid, book_id, kind, plan, model, verify, hero=None, hero_max=2):
     with _sem:
         c = db.conn(); t0 = time.time()
         log = []; state = {"pct": 1, "batches": 3, "stage": "segment", "last": 0}
@@ -69,10 +69,14 @@ def _run(jid, book_id, kind, plan, model, verify):
                 m = re.search(r"（(\d+)/(\d+)）", msg)
                 if m:
                     state["pct"] = max(state["pct"], 14 + 48 * int(m.group(1)) / max(1, int(m.group(2))))
+            elif stage == "hero+":   # "…（2/5）" → 64% + 已完成占比 × 14%
+                m = re.search(r"（(\d+)/(\d+)）", msg)
+                if m:
+                    state["pct"] = max(state["pct"], 64 + 14 * int(m.group(1)) / max(1, int(m.group(2))))
             elif stage in STAGE_PCT:
                 state["pct"] = max(state["pct"], STAGE_PCT[stage])
             state["stage"] = stage
-            save(force=stage in ("segment", "plan", "render", "verify", "chapter+", "cast"))
+            save(force=stage in ("segment", "plan", "render", "verify", "chapter+", "cast", "hero", "hero+"))
 
         try:
             b = c.execute("SELECT * FROM books WHERE id=?", (book_id,)).fetchone()
@@ -89,7 +93,8 @@ def _run(jid, book_id, kind, plan, model, verify):
                 plan_in = json.loads(b["plan_json"])
             out = book_dir(book_id) / "book.html"
             rep = build(b["text"], out, title=b["title"], author=b["author"] or None, theme=b["theme"],
-                        verify=verify, plan_in=plan_in, model=None if plan_in else model, progress=prog)
+                        verify=verify, plan_in=plan_in, model=None if plan_in else model, progress=prog,
+                        hero=hero, hero_max=hero_max)
             plan_json = (out.parent / "book.plan.json").read_text(encoding="utf-8")
             v = rep.get("verify")
             llm = rep.get("llm", {})

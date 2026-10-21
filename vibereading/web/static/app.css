@@ -146,6 +146,7 @@ main:has(>.auth:last-child)+.foot,main:has(>.room:last-child)+.foot{margin-top:0
 .opts{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--sans);font-size:13.5px;color:var(--ink2)}
 .opts label{display:flex;align-items:center;gap:8px;cursor:pointer}
 .opts input{accent-color:var(--cinnabar);width:15px;height:15px}
+.opts select{font:inherit;color:inherit;background:transparent;border:1px solid var(--rule,#ccc);border-radius:3px;padding:0 4px}
 .notice{border-left:3px solid var(--cinnabar);padding:10px 14px;background:var(--paper2);font-family:var(--sans);font-size:13px;color:var(--ink2);line-height:1.7;margin-bottom:22px}
 .notice b{color:var(--ink)}
 .notice code,.mono-in{font-family:var(--mono);font-size:12px;background:var(--paper3);padding:1px 5px}

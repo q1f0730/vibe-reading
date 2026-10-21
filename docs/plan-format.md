@@ -27,6 +27,7 @@ python3 -m vibereading.segment novel.txt        # 打印段落数与特殊段（
 | `utterances` | 否 | 段内台词归属：`{ "i": 段号, "q": "原文逐字子串", "sp": 人物id }`，渲染为说话人色下划线 |
 | `visuals` | 否 | 组件节点：`{ "at": 段号, "pos": "before"/"after", "type": 组件名, "params": {...} }` |
 | `quotes` | 否 | 大字摘句：`{ "at": 段号, "text": "原文逐字子串", "w": 1-5 分量 }` |
+| `heroes` | 否 | 关键场景动画（`--hero` 生成）：`{ "id", "at": 段号, "pos": "after", "title", "caption", "seconds": 8-20, "module": 动画模块片段或 null, "fallback": {"type": 组件名, "params": {…}} }`；渲染前会重新做静态安全检查，不合格的模块改用 fallback |
 
 ### paras（两种写法都接受）
 

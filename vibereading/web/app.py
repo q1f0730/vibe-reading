@@ -320,7 +320,15 @@ class H(BaseHTTPRequestHandler):
         db.conn().execute("INSERT INTO books(id, user_id, title, author, source_name, text, char_count, model, theme, status, visibility, created_at, updated_at) "
                           "VALUES(?,?,?,?,?,?,?,?,?, 'queued','private',?,?)",
                           (bid, u["id"], title, author, name, text, len(re.sub(r"\s", "", text)), "plan.json" if plan else (model or planner.DEFAULT_PROVIDER), theme, now, now))
-        jid = jobs.start(bid, u["id"], "build", plan=plan, model=model, verify=b.get("verify", True) is not False)
+        hero = bool(b.get("hero")) and not plan
+        try:
+            hero_max = min(3, max(1, int(b.get("hero_max") or 2)))
+        except (TypeError, ValueError):
+            hero_max = 2
+        if hero and not planner.llm_available("mercury"):
+            raise HTTPError(400, "关键场景动画需要 Mercury（服务器没有配置 INCEPTION_API_KEY）")
+        jid = jobs.start(bid, u["id"], "build", plan=plan, model=model, verify=b.get("verify", True) is not False,
+                         hero=hero or None, hero_max=hero_max)
         self._send(201, {"book": bid, "job": jid, "progress": f"/jobs/{jid}"})
 
     def a_get_book(self, bid):
@@ -345,7 +353,9 @@ class H(BaseHTTPRequestHandler):
             model = model.split(":")[0] if model else None
             if not planner.llm_available(model):
                 raise HTTPError(400, "服务器没有配置模型 key，无法重新规划；可以“沿用分镜重新渲染”")
-            jid = jobs.start(bid, u["id"], "replan", model=model, verify=True)
+            hero = True if body.get("hero") else None
+            jid = jobs.start(bid, u["id"], "replan", model=model, verify=True, hero=hero,
+                             hero_max=min(3, max(1, int(body.get("hero_max") or 2))) if str(body.get("hero_max") or "2").isdigit() else 2)
         else:
             raise HTTPError(400, "mode 只能是 rerender / replan")
         self._send(201, {"job": jid, "progress": f"/jobs/{jid}"})

@@ -1,0 +1,9 @@
+<style>#st{position:relative;width:100%;height:100vh;overflow:hidden;background:var(--bg)}svg{width:100%;height:100%;display:block}
+.ink{fill:none;stroke:var(--ink);stroke-width:1.4}.lab{font:14px serif;fill:var(--ink2)}</style>
+<div id="st"><svg viewBox="0 0 400 260" preserveAspectRatio="xMidYMid meet">
+<rect class="ink" x="150" y="40" width="100" height="190"/><path id="leaf" class="ink" d="M150 40 L230 55 L230 215 L150 230 Z"/>
+<circle id="a" cx="60" cy="200" r="7" style="fill:var(--c-aqing)"/><circle id="b" cx="340" cy="200" r="7" style="fill:var(--c-laozhou)"/>
+<line id="ln" class="ink" x1="60" y1="200" x2="340" y2="200" stroke-dasharray="4 4"/><text class="lab" x="20" y="30" id="t">门</text></svg></div>
+<script>(function(){var a=document.getElementById('a'),b=document.getElementById('b'),ln=document.getElementById('ln'),leaf=document.getElementById('leaf');
+VRH.onProgress(function(p){var k=VRH.ease(VRH.seg(p,0,1));var xa=VRH.lerp(60,170,k),xb=VRH.lerp(340,230,k);a.setAttribute('cx',xa);b.setAttribute('cx',xb);ln.setAttribute('x1',xa);ln.setAttribute('x2',xb);
+leaf.setAttribute('d','M150 40 L'+VRH.lerp(230,160,k)+' 55 L'+VRH.lerp(230,160,k)+' 215 L150 230 Z');});})();</script>

@@ -69,7 +69,8 @@ if (go) {
     try {
       await startBuild({name: fname, text, title: $('#title').value || $('#title').placeholder.replace(/^留空则用文件名$/, '') || fname,
         author: $('#author').value, model: m === 'plan' ? null : m, plan: m === 'plan' ? plan : null,
-        verify: $('#verify').checked, theme: $('#night').checked ? 'night' : 'paper'});
+        verify: $('#verify').checked, theme: $('#night').checked ? 'night' : 'paper',
+        hero: m !== 'plan' && $('#hero').checked, hero_max: +$('#heroMax').value});
     } catch (x) { $('#err').textContent = x.status === 401 ? '登录已过期，请重新登录' : x.message; go.disabled = false; }
   };
   upd();
@@ -125,7 +126,7 @@ if (da) da.onsubmit = async e => { e.preventDefault(); if (!confirm('永久删�
 const dev = $('#dev');
 if (dev) {
   const jid = dev.dataset.job, bid = dev.dataset.book; const t0 = parseFloat(dev.dataset.created) * 1000;
-  const STEP_OF = {queued: null, start: null, segment: 'segment', outline: 'plan', detail: 'plan', 'detail+': 'plan', plan: 'plan', cast: 'plan', chapters: 'plan', 'chapter+': 'plan', render: 'render', verify: 'verify', shots: 'verify', done: 'done', failed: null};
+  const STEP_OF = {queued: null, start: null, segment: 'segment', outline: 'plan', detail: 'plan', 'detail+': 'plan', plan: 'plan', cast: 'plan', chapters: 'plan', 'chapter+': 'plan', hero: 'plan', 'hero+': 'plan', render: 'render', verify: 'verify', shots: 'verify', done: 'done', failed: null};
   const ORDER = ['segment', 'plan', 'render', 'verify'];
   let endT = null, last = -1;
   const tc = $('#tc'); const tcSmall = tc.querySelector('small').outerHTML;

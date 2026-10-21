@@ -123,7 +123,9 @@ def home(user, sample, llm, labels):
    <div class="field hide" id="planf"><label class="drop small" id="pdrop"><input type="file" id="pf" accept=".json,application/json"><span class="big" id="pname">选择 plan.json</span><span class="sm">格式见 docs/plan-format.md</span></label></div>
    <div class="field"><span class="lbl"><i>E</i>选项</span><div class="opts">
     <label><input type="checkbox" id="verify" checked> 生成后逐段校验</label>
-    <label><input type="checkbox" id="night"> 默认夜间主题</label></div></div>
+    <label><input type="checkbox" id="night"> 默认夜间主题</label>
+    <label title="每章由 Mercury 挑关键场景，写一段沙箱里的滚动动画；自动校验，不合格回退预制组件"><input type="checkbox" id="hero"> 关键场景动画</label>
+    <label class="hero-n">每章 <select id="heroMax" aria-label="每章关键场景动画上限"><option>1</option><option selected>2</option><option>3</option></select> 个</label></div></div>
    <div class="go-row"><button class="btn" id="go" disabled>开始显影 <span class="arr">→</span></button><span class="est" id="est"></span></div>
    <div class="err" id="err" role="alert"></div>
   </div>

@@ -174,6 +174,21 @@ def split_scenes_at_chapters(scenes, chs):
     return out
 
 
+def hero_block(h, chars):
+    """关键场景动画：sticky 舞台 + 沙箱 iframe（父页面滚动时用 postMessage 传进度）。模块源码放在惰性的 JSON script 里，
+    接近视口时才创建 iframe。装饰层（aria-hidden），不含原文。"""
+    from . import hero as H
+    doc = H.wrap(h["module"], chars)
+    src = json.dumps(doc, ensure_ascii=False).replace("<", "\\u003c")   # 杜绝 </script> / <!-- 提前结束脚本块
+    secs = float(h.get("seconds") or 12)
+    length = round(1 + secs * 0.12, 2)      # 8s → 1.96 屏高，20s → 3.4 屏高（舞台 sticky，滚动距离 ≈ 高度 − 舞台高）
+    title = E(h.get("title") or ""); cap_ = E(h.get("caption") or "")
+    return (f'<figure class="hs" aria-hidden="true" data-hs="{E(h["id"])}" style="--len:{length}">'
+            f'<div class="hs-stage"><div class="hs-frame"><span class="hs-ph"></span></div>'
+            f'<figcaption><b>{title}</b>{(" · " + cap_) if cap_ and cap_ != title else ""}</figcaption></div>'
+            f'<script type="application/json" class="hs-src">{src}</script></figure>')
+
+
 def render(seg, plan, title=None, author=None, work=None, theme="paper"):
     segs = seg["segments"]; n = len(segs); warnings = []
     chs, chapter_mode = pick_chapters(seg, plan)
@@ -189,7 +204,25 @@ def render(seg, plan, title=None, author=None, work=None, theme="paper"):
     utt_by = {}
     for u in plan.get("utterances", []):
         utt_by.setdefault(u["i"], []).append(u)
+    # 关键场景动画（hero scenes）：合格的模块放沙箱 iframe；失败的回退为预制组件（插在同一位置）
+    from . import hero as H
+    heroes = H.sanitize_heroes(plan.get("heroes"), n)
+    hero_at = {}
+    for h in heroes:
+        if h.get("module"):
+            hero_at.setdefault((h["at"], h.get("pos", "after")), []).append(("hero", h))
+            near = [v for v in plan["visuals"] if abs(v["at"] - h["at"]) <= 1]
+            if near:   # 动画旁边的预制组件会显得重复
+                for v in near:
+                    warnings.append(f"跳过组件 {v['type']}@{v['at']}：与关键场景动画 {h['id']} 相邻")
+                plan = dict(plan, visuals=[v for v in plan["visuals"] if v not in near])
+        elif h.get("fallback"):
+            hero_at.setdefault((h["at"], h.get("pos", "after")), []).append(("fallback", h))
     visuals, quotes = curate(plan, segs, warnings)
+    for (i, pos), lst in hero_at.items():   # 回退组件：若同位置已有同类型组件就不重复
+        for kind, h in list(lst):
+            if kind == "fallback" and any(v["at"] == i and v["type"] == h["fallback"]["type"] for v in visuals):
+                lst.remove((kind, h))
     at = {}
     for v in visuals:
         at.setdefault((v["at"], v.get("pos", "before")), []).append(v)
@@ -202,6 +235,15 @@ def render(seg, plan, title=None, author=None, work=None, theme="paper"):
     def vhtml(v):
         ctx["seq"] += 1
         return C.RENDER[v["type"]](v["params"], ctx)
+
+    def heroes_html(i, pos):
+        out = []
+        for kind, h in hero_at.get((i, pos), []):
+            if kind == "hero":
+                out.append(hero_block(h, chars))
+            else:
+                out.append(vhtml({"at": i, "type": h["fallback"]["type"], "params": dict(h["fallback"]["params"])}))
+        return out
 
     # hero: leading dateline-ish paragraphs (must be a prefix)
     hero_ids = []
@@ -250,6 +292,7 @@ def render(seg, plan, title=None, author=None, work=None, theme="paper"):
                 if v["type"] == "stairs_memory" and tone != "memory" and not mem_open:
                     parts.append('<div class="memory-block reveal">'); mem_open = True
                 parts.append(vhtml(v))
+            parts += heroes_html(i, "before")
             extra = ""
             if not dropcap_done and sg["role"] == "text" and len(sg["text"]) > 30 and not sg["text"][0].isascii():
                 extra = "dropcap"; dropcap_done = True
@@ -262,6 +305,7 @@ def render(seg, plan, title=None, author=None, work=None, theme="paper"):
                 if v["type"] == "car_night" and tone != "night" and not band_open:
                     parts.append('<div class="night-band">'); band_open = True
                 parts.append(vhtml(v))
+            parts += heroes_html(i, "after")
         if k == len(plan["scenes"]) - 1:
             parts.append('<div class="fin reveal" aria-hidden="true">· · ·</div>')
         if band_open:

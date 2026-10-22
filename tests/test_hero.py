@@ -152,7 +152,7 @@ class Orchestration(unittest.TestCase):
         fake = FakeLLM([GOOD, broken, broken])   # h1-1 首次通过；h1-2 两次都坏 → 回退
         with mock.patch.object(planner, "chat", fake), mock.patch.object(hero, "check", self._check_stub), \
              mock.patch.dict(os.environ, {"VR_LLM_CONCURRENCY": "1"}):
-            hs = hero.run(self.seg, self.plan, per_chapter=3)
+            hs = hero.run(self.seg, self.plan, per_chapter=3, mode="code")
         H = {h["id"]: h for h in self.plan["heroes"]}
         self.assertEqual(hs.selected, 2)
         self.assertEqual(H["h1-1"]["status"], "ok"); self.assertEqual(H["h1-1"]["attempts"], 1)
@@ -172,19 +172,19 @@ class Orchestration(unittest.TestCase):
         broken = GOOD.replace("<script>", "<script>/*BROKEN*/", 1)
         sel = {"heroes": SELECT_JSON["heroes"][:1]}
         with mock.patch.object(planner, "chat", FakeLLM([broken, GOOD], select=sel)), mock.patch.object(hero, "check", self._check_stub):
-            hs = hero.run(self.seg, self.plan, per_chapter=1)
+            hs = hero.run(self.seg, self.plan, per_chapter=1, mode="code")
         self.assertEqual(self.plan["heroes"][0]["status"], "fixed"); self.assertEqual(hs.passed_fixed, 1)
 
     def test_content_filter_generation_falls_back(self):
         with mock.patch.object(planner, "chat", FakeLLM([], gen_filtered=True)), mock.patch.object(hero, "check", self._check_stub):
-            hs = hero.run(self.seg, self.plan, per_chapter=2)
+            hs = hero.run(self.seg, self.plan, per_chapter=2, mode="code")
         self.assertTrue(all(h["status"] == "fallback" and h["module"] is None for h in self.plan["heroes"]))
         self.assertEqual(hs.fallback, 2); self.assertGreaterEqual(hs.filtered, 2)
 
     def test_content_filter_selection_retries_without_snippets(self):
         fake = FakeLLM([GOOD, GOOD], select_filtered=1)
         with mock.patch.object(planner, "chat", fake), mock.patch.object(hero, "check", self._check_stub):
-            hs = hero.run(self.seg, self.plan, per_chapter=2)
+            hs = hero.run(self.seg, self.plan, per_chapter=2, mode="code")
         sels = [m for tag, m in fake.calls if tag.startswith("你是图文长篇")]
         self.assertEqual(len(sels), 2)
         self.assertIn("今天的风很大"[:4], sels[0][1]["content"])          # 第一次带截断短摘
@@ -193,7 +193,7 @@ class Orchestration(unittest.TestCase):
         # 两次都被拒 → 本章不做 hero，流程照常
         plan2 = synth_plan(self.seg)
         with mock.patch.object(planner, "chat", FakeLLM([], select_filtered=2)), mock.patch.object(hero, "check", self._check_stub):
-            hs2 = hero.run(self.seg, plan2, per_chapter=2)
+            hs2 = hero.run(self.seg, plan2, per_chapter=2, mode="code")
         self.assertEqual(plan2["heroes"], []); self.assertEqual(hs2.filtered, 2)
 
     def test_render_iframe_and_fallback(self):
@@ -238,7 +238,7 @@ class Orchestration(unittest.TestCase):
             sel = {"heroes": SELECT_JSON["heroes"][:1]}
             with mock.patch.object(planner, "chat", FakeLLM([GOOD], select=sel)), mock.patch.object(hero, "check", self._check_stub), \
                  mock.patch.dict(os.environ, {"VIBEREADING_GATEWAY": "1"}):
-                rep = pipeline.build(text, out, plan_in=synth_plan(self.seg), hero=True, hero_max=1)
+                rep = pipeline.build(text, out, plan_in=synth_plan(self.seg), hero=True, hero_max=1, hero_mode="code")
             self.assertEqual(rep["hero"]["selected"], 1); self.assertEqual(rep["hero"]["passed_first"], 1)
             saved = json.loads((pathlib.Path(d) / "b.plan.json").read_text(encoding="utf-8"))
             self.assertEqual(len(saved["heroes"]), 1)

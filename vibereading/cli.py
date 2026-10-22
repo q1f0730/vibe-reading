@@ -24,6 +24,8 @@ def main(argv=None):
                    help="生成关键场景专属动画（每章 1–3 个，Mercury 写沙箱动画模块，自动校验，不合格回退预制组件）")
     h.add_argument("--no-hero", dest="hero", action="store_const", const=False, help="去掉分镜里已有的关键场景动画")
     b.add_argument("--hero-max", type=int, default=2, choices=[1, 2, 3], help="每章关键场景动画上限（默认 2）")
+    b.add_argument("--hero-mode", choices=["prims", "code"], default=None,
+                   help="prims（默认）：模型只输出编排 JSON，视觉来自内置高级原语库；code：模型自由写动画代码（旧模式，默认关闭）")
     a = ap.parse_args(argv)
     text = pathlib.Path(a.input).read_text(encoding="utf-8")
     t0 = time.time()
@@ -32,7 +34,7 @@ def main(argv=None):
     try:
       rep = build(text, a.output, title=a.title, author=a.author, work=a.work, theme=a.theme, plan_in=a.plan,
                 reuse_plan=a.reuse_plan, verify=a.verify, shots=a.shots, model=a.model, effort=a.effort, progress=prog,
-                hero=a.hero, hero_max=a.hero_max)
+                hero=a.hero, hero_max=a.hero_max, hero_mode=a.hero_mode)
     except RuntimeError as e:
         print(f"错误：{e}", file=sys.stderr); return 1
     llm = rep.get("llm", {})
@@ -40,7 +42,7 @@ def main(argv=None):
                       "model": f"{llm.get('provider')}:{llm.get('model')}", "llm_calls": llm.get("calls"), "retries": llm.get("retries"),
                       "json_first_pass": f"{llm.get('first_pass')}/{llm.get('tasks')}", "plan_seconds": rep["plan_seconds"],
                       "total_seconds": rep["total_seconds"], "verify": rep.get("verify"),
-                      "hero": {k: rep["hero"].get(k) for k in ("selected", "passed_first", "passed_fixed", "fallback", "filtered", "llm_calls", "seconds", "skipped")} if rep.get("hero") else None}, ensure_ascii=False, indent=1))
+                      "hero": {k: rep["hero"].get(k) for k in ("mode", "selected", "passed_first", "passed_fixed", "rule", "fallback", "filtered", "llm_calls", "seconds", "skipped")} if rep.get("hero") else None}, ensure_ascii=False, indent=1))
     v = rep.get("verify")
     return 0 if (not v or v.get("ok")) else 2
 

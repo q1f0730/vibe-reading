@@ -1,0 +1,25 @@
+:root{--paper:#f4efe6;--paper2:#e9e2d5;--ink:#1b1814;--ink2:#6b645a;--ink3:#b9b1a3;--safe:#b3261e;--cool:#46627a;--warm:#f3d8a4;--dark:#100d0c;--dark2:#1c1714;
+--serif:'Noto Serif SC','Noto Serif CJK SC','Source Han Serif SC','Songti SC','STSong','SimSun',serif;
+--sans:'Noto Sans SC','Noto Sans CJK SC','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+--mono:'SFMono-Regular','Menlo','Consolas','Noto Sans Mono CJK SC',monospace}
+:root[data-theme=night]{--paper:#17181b;--paper2:#202226;--ink:#e8e1d4;--ink2:#a1998c;--ink3:#4a4741;--safe:#e0505a;--cool:#8fb0c9;--warm:#f0cf95;--dark:#0b0a09;--dark2:#16130f}
+#vrp{position:fixed;inset:0;overflow:hidden;background:var(--paper);color:var(--ink);font-family:var(--serif);-webkit-font-smoothing:antialiased;contain:strict}
+#vrp .vl{position:absolute;inset:0;overflow:hidden;will-change:opacity}
+#vrp .vl.dk{background:var(--dark);color:#efe7da}
+#vrp svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
+#vrp canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#vrp .vgrain{position:absolute;inset:-64px;pointer-events:none;opacity:.10;mix-blend-mode:multiply;z-index:20}
+:root[data-theme=night] #vrp .vgrain{mix-blend-mode:screen;opacity:.06}
+#vrp .vvig{position:absolute;inset:0;pointer-events:none;z-index:19;background:radial-gradient(120% 90% at 50% 45%,transparent 58%,rgba(40,28,18,.10) 100%)}
+:root[data-theme=night] #vrp .vvig{background:radial-gradient(120% 90% at 50% 45%,transparent 55%,rgba(0,0,0,.35) 100%)}
+#vrp .vslug{position:absolute;left:14px;right:14px;top:11px;display:flex;justify-content:space-between;z-index:21;font:500 10px/1 var(--mono);letter-spacing:.14em;color:var(--ink2);opacity:.8;pointer-events:none;text-transform:uppercase}
+#vrp .vslug b{font-weight:500;color:var(--ink)}
+#vrp .vslug.on-dark,#vrp .vslug.on-dark b{color:rgba(239,231,218,.62)}
+#vrp .w{position:absolute;white-space:nowrap;line-height:1;font-family:var(--serif)}
+#vrp .ch{display:inline-block;will-change:transform,opacity,filter}
+#vrp .note{font:400 11px/1.4 var(--sans);letter-spacing:.32em;color:var(--ink2);white-space:nowrap}
+#vrp .rule{position:absolute;height:1px;background:currentColor;transform-origin:0 50%}
+#vrp .mk{position:absolute;overflow:hidden;line-height:1.08}
+#vrp .mk>span{display:block;will-change:transform}
+#vrp .bokeh{position:absolute;border-radius:50%;will-change:transform,opacity}
+#vrp .lab{font:400 12px/1 var(--sans);letter-spacing:.18em}

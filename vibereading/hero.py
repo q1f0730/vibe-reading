@@ -17,6 +17,7 @@ import html as _html
 import json, os, pathlib, re, subprocess, tempfile, time, urllib.error
 
 from . import planner
+from . import hero_prims as HP
 from .registry import COMPONENTS, prompt_catalog
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -25,6 +26,8 @@ DEFAULT_PER_CHAPTER = 2
 HERO_MAX_PER_CHAPTER = 3
 MIN_GAP = 6          # 两个 hero 之间至少隔几段（太近会连成一大片动画，读者没法读正文）
 EFFORT = os.environ.get("VR_HERO_EFFORT", "instant")      # mercury reasoning_effort for module generation
+MODES = ("prims", "code")
+DEFAULT_MODE = os.environ.get("VR_HERO_MODE", "prims") if os.environ.get("VR_HERO_MODE", "prims") in MODES else "prims"
 
 PAPER = {"bg": "#faf9f7", "bg2": "#f3f0ea", "ink": "#1a1a1a", "ink2": "#5e5e5e", "rule": "#d9d4ca", "accent": "#c41e3a", "heat": "#ff6a3d"}
 NIGHT = {"bg": "#15171b", "bg2": "#1d2025", "ink": "#e4ded3", "ink2": "#a39d92", "rule": "#3a4047", "accent": "#e06a7d", "heat": "#ff8a5c"}
@@ -231,7 +234,8 @@ SELECT_SYS = """你是图文长篇（NYT / The Pudding 式滚动叙事）的视�
  "fallback":{{"type":"预制组件名","params":{{…}}}}}}]}}
 fallback 从下列预制组件里选一个最接近的（动画生成失败时用）：
 {catalog}
-规则：多个 hero 不要挤在同一个场景，彼此至少相隔 10 段，尽量分布在本章的前、中、后段（开场的进门/到达这类空间性强的时刻也是好选择）；at 必须落在该场景段号范围内；只输出 JSON。"""
+规则：本章被切成 {k} 个分区（见用户消息里的“分区”），**每个分区必须恰好选 1 个**（at 落在该分区段号范围内），不要都挤在后半章；
+开场的进门/到达这类空间性强的时刻也是好选择；at 必须落在该场景段号范围内且是正文段（不是日期行、章名或脚注）；只输出 JSON。"""
 
 GEN_SYS = """你是 The Pudding / NYT 图像部的前端动画师。为一部小说的一个关键场景写一段**自包含**的滚动叙事动画模块。
 你拿到的只有场景描述（不是原文）。不要写出原文句子；画面里的文字只允许是短标签（≤8字），且最多 4 处。
@@ -365,7 +369,7 @@ def _chat(msgs, max_tokens, stats, json_mode, effort=None):
 
 class HeroStats:
     def __init__(self):
-        self.selected = 0; self.passed_first = 0; self.passed_fixed = 0; self.fallback = 0; self.filtered = 0
+        self.selected = 0; self.passed_first = 0; self.passed_fixed = 0; self.fallback = 0; self.filtered = 0; self.rule = 0; self.mode = DEFAULT_MODE
         self.gen_calls = 0; self.select_calls = 0; self.browser_checks = 0; self.log = []; self.warnings = []
         self.llm = planner.Stats("mercury", "mercury-3")
 
@@ -376,64 +380,120 @@ class HeroStats:
 
 
 # ------------------------------------------------------------------ stages
+def zones(seg, a, b, k):
+    """把本章正文段按顺序切成 k 个等长分区，返回 [(lo, hi)]（段号闭区间）。"""
+    txt = [i for i in range(a, b + 1) if seg["segments"][i]["role"] == "text"] or list(range(a, b + 1))
+    out = []
+    for z in range(k):
+        lo, hi = txt[len(txt) * z // k], txt[max(len(txt) * (z + 1) // k - 1, len(txt) * z // k)]
+        out.append((lo if z else a, hi if z < k - 1 else b))
+    return out
+
+
+def zone_of(zs, at):
+    return next((z for z, (lo, hi) in enumerate(zs) if lo <= at <= hi), len(zs) - 1)
+
+
+def snap_text(seg, at, lo=0, hi=None, skip=()):
+    """at 落在日期行 / 脚注 / 章名 / 首屏段上时，挪到最近的正文段（优先往后，范围 lo–hi）。"""
+    S = seg["segments"]; hi = len(S) - 1 if hi is None else hi
+    ok = lambda i: lo <= i <= hi and S[i]["role"] == "text" and i not in skip
+    if 0 <= at < len(S) and ok(at):
+        return at
+    for d in range(1, len(S)):
+        for i in (at + d, at - d):
+            if ok(i):
+                return i
+    return at
+
+
+def _clean_desc(h, scenes_in, plan, a, b, char_ids, hs):
+    import jsonschema
+    if not isinstance(h, dict):
+        return None
+    for key in ("scene", "at"):
+        if isinstance(h.get(key), str) and h[key].strip().isdigit():
+            h[key] = int(h[key])
+    V = jsonschema.Draft202012Validator(SELECT_SCHEMA["properties"]["heroes"]["items"])
+    errs = list(V.iter_errors(h))
+    if errs:
+        # 宽松修复：截断超长字符串、夹紧秒数；结构性缺失则丢弃
+        for f, n in (("title", 14), ("caption", 40), ("summary", 220), ("setting", 80), ("motif", 60)):
+            if isinstance(h.get(f), str): h[f] = h[f][:n]
+        if isinstance(h.get("seconds"), (int, float)): h["seconds"] = min(20, max(8, h["seconds"]))
+        h["objects"] = [str(x)[:16] for x in (h.get("objects") or [])][:8]
+        h["curve"] = [c for c in (h.get("curve") or []) if isinstance(c, dict) and isinstance(c.get("t"), (int, float))][:6]
+        for c in h["curve"]:
+            c["t"] = min(1, max(0, c["t"])); c["beat"] = str(c.get("beat", ""))[:30]
+        if list(V.iter_errors(h)):
+            hs.warnings.append(f"[hero select {a}-{b}] 丢弃不合格描述：{errs[0].message[:80]}"); return None
+    sc = h["scene"]
+    if sc not in scenes_in:   # 用 at 反推场景
+        sc = next((i for i in scenes_in if plan["scenes"][i]["start"] <= h["at"] <= plan["scenes"][i]["end"]), None)
+        if sc is None:
+            return None
+        h["scene"] = sc
+    s = plan["scenes"][sc]
+    if not (max(a, s["start"]) <= h["at"] <= min(b, s["end"])):
+        h["at"] = min(b, s["end"])
+    h["characters"] = [c for c in h.get("characters", []) if c.get("id") in char_ids]
+    h["fallback"] = clean_fallback(h.get("fallback"))
+    h.setdefault("tone", s.get("tone", "day"))
+    return h
+
+
 def select(seg, plan, a, b, title, k, hs):
-    """返回本章 hero 场景描述列表（已校验 at/scene），被拒或失败返回 []。"""
+    """返回本章 hero 场景描述列表（已校验 at/scene，并按前/中/后分区各取 1 个），被拒或失败返回 []。"""
     scenes_in = [i for i, s in enumerate(plan["scenes"]) if not (s["end"] < a or s["start"] > b)]
     if not scenes_in:
         return []
     char_ids = {c["id"] for c in plan["characters"]}
-    for with_snips in (True, False):
-        msgs = [{"role": "system", "content": SELECT_SYS.format(k=k, catalog=prompt_catalog())},
-                {"role": "user", "content": chapter_digest(seg, plan, a, b, title, with_snips)}]
-        hs.select_calls += 1
-        try:
-            raw, fin = _chat(msgs, 3000, hs.llm, True)
-            o = planner.parse_json(raw)
-        except urllib.error.HTTPError as e:
-            if _is_filtered(e):
-                hs.filtered += 1; hs.warnings.append(f"[hero select {a}-{b}] 内容过滤拒答" + ("，去掉短摘重试" if with_snips else "，本章不做 hero"))
-                continue
-            hs.warnings.append(f"[hero select {a}-{b}] HTTP {e.code}"); return []
-        except Exception as e:
-            hs.warnings.append(f"[hero select {a}-{b}] {type(e).__name__}: {str(e)[:120]}"); return []
-        out = []
-        import jsonschema
-        for h in (o.get("heroes") or [])[:k] if isinstance(o, dict) else []:
-            if not isinstance(h, dict):
-                continue
-            for key in ("scene", "at"):
-                if isinstance(h.get(key), str) and h[key].strip().isdigit():
-                    h[key] = int(h[key])
-            errs = list(jsonschema.Draft202012Validator(SELECT_SCHEMA["properties"]["heroes"]["items"]).iter_errors(h))
-            if errs:
-                # 宽松修复：截断超长字符串、夹紧秒数；结构性缺失则丢弃
-                for f, n in (("title", 14), ("caption", 40), ("summary", 220), ("setting", 80), ("motif", 60)):
-                    if isinstance(h.get(f), str): h[f] = h[f][:n]
-                if isinstance(h.get("seconds"), (int, float)): h["seconds"] = min(20, max(8, h["seconds"]))
-                h["objects"] = [str(x)[:16] for x in (h.get("objects") or [])][:8]
-                h["curve"] = [c for c in (h.get("curve") or []) if isinstance(c, dict) and isinstance(c.get("t"), (int, float))][:6]
-                for c in h["curve"]:
-                    c["t"] = min(1, max(0, c["t"])); c["beat"] = str(c.get("beat", ""))[:30]
-                if list(jsonschema.Draft202012Validator(SELECT_SCHEMA["properties"]["heroes"]["items"]).iter_errors(h)):
-                    hs.warnings.append(f"[hero select {a}-{b}] 丢弃不合格描述：{errs[0].message[:80]}"); continue
-            sc = h["scene"]
-            if sc not in scenes_in:   # 用 at 反推场景
-                sc = next((i for i in scenes_in if plan["scenes"][i]["start"] <= h["at"] <= plan["scenes"][i]["end"]), None)
-                if sc is None:
+    zs = zones(seg, a, b, k)
+    names = ["前段", "中段", "后段"] if k == 3 else (["前半", "后半"] if k == 2 else ["全章"])
+    skip = set(plan.get("meta", {}).get("hero_segments", []) or [])
+    picked, snips = {}, True
+    for round_ in range(2):
+        missing = [z for z in range(k) if z not in picked]
+        if not missing:
+            break
+        zone_txt = "\n分区：" + "；".join(f"{names[z]} 段 {zs[z][0]}–{zs[z][1]}" for z in range(k))
+        if round_:
+            zone_txt += "\n已经选好的分区不用再选；这次只为这些分区各选 1 个：" + "、".join(f"{names[z]}（段 {zs[z][0]}–{zs[z][1]}）" for z in missing)
+        o = None
+        for with_snips in ((True, False) if snips else (False,)):
+            msgs = [{"role": "system", "content": SELECT_SYS.format(k=len(missing) if round_ else k, catalog=prompt_catalog())},
+                    {"role": "user", "content": chapter_digest(seg, plan, a, b, title, with_snips) + zone_txt}]
+            hs.select_calls += 1
+            try:
+                raw, fin = _chat(msgs, 3000, hs.llm, True)
+                o = planner.parse_json(raw)
+                break
+            except urllib.error.HTTPError as e:
+                if _is_filtered(e):
+                    hs.filtered += 1; hs.warnings.append(f"[hero select {a}-{b}] 内容过滤拒答" + ("，去掉短摘重试" if with_snips else "，本章不做 hero"))
+                    snips = False
                     continue
-                h["scene"] = sc
-            s = plan["scenes"][sc]
-            if not (max(a, s["start"]) <= h["at"] <= min(b, s["end"])):
-                h["at"] = min(b, s["end"])
-            if any(x["scene"] == sc or abs(x["at"] - h["at"]) < MIN_GAP for x in out):
-                hs.warnings.append(f"[hero select {a}-{b}] 丢弃与其它 hero 太近的场景 {sc}@{h['at']}")
+                hs.warnings.append(f"[hero select {a}-{b}] HTTP {e.code}"); o = None; break
+            except Exception as e:
+                hs.warnings.append(f"[hero select {a}-{b}] {type(e).__name__}: {str(e)[:120]}"); o = None; break
+        if not isinstance(o, dict):
+            break
+        for h in (o.get("heroes") or [])[:k]:
+            h = _clean_desc(h, scenes_in, plan, a, b, char_ids, hs)
+            if not h:
                 continue
-            h["characters"] = [c for c in h.get("characters", []) if c.get("id") in char_ids]
-            h["fallback"] = clean_fallback(h.get("fallback"))
-            h.setdefault("tone", s.get("tone", "day"))
-            out.append(h)
-        return out
-    return []
+            sc = plan["scenes"][h["scene"]]
+            h["at"] = snap_text(seg, h["at"], max(a, sc["start"]), min(b, sc["end"]), skip)
+            if seg["segments"][h["at"]]["role"] != "text":
+                h["at"] = snap_text(seg, h["at"], a, b, skip)
+            z = zone_of(zs, h["at"])
+            if z in picked:
+                hs.warnings.append(f"[hero select {a}-{b}] 丢弃与{names[z]}已选场景重复的 {h['scene']}@{h['at']}"); continue
+            if any(x["scene"] == h["scene"] or abs(x["at"] - h["at"]) < MIN_GAP for x in picked.values()):
+                hs.warnings.append(f"[hero select {a}-{b}] 丢弃与其它 hero 太近的场景 {h['scene']}@{h['at']}"); continue
+            h["zone"] = z
+            picked[z] = h
+    return [picked[z] for z in sorted(picked)]
 
 
 def _desc_for_gen(h, plan):
@@ -546,6 +606,154 @@ def make_one(hid, h, plan, chars, hs):
     return entry
 
 
+# ------------------------------------------------------------------ prims mode (default)
+def compose(h, plan, hs, msgs=None, used=None):
+    """模型只出编排 JSON。返回 (obj|None, messages, parse_error|None)；被内容过滤拒答抛 planner.ContentFiltered。"""
+    if msgs is None:
+        msgs = [{"role": "system", "content": HP.COMPOSE_SYS.format(catalog=HP.catalog())},
+                {"role": "user", "content": HP.compose_user(_desc_for_gen(h, plan), plan["characters"], used)}]
+    hs.gen_calls += 1
+    try:
+        raw, fin = _chat(msgs, 2500, hs.llm, True)
+    except urllib.error.HTTPError as e:
+        if _is_filtered(e):
+            raise planner.ContentFiltered("hero-compose")
+        raise
+    msgs = msgs + [{"role": "assistant", "content": raw or ""}]
+    try:
+        return planner.parse_json(raw or ""), msgs, None
+    except Exception as e:
+        return None, msgs, f"输出不是合法 JSON（{type(e).__name__}）"
+
+
+COMPOSE_FIX = """编排没有通过自动校验：
+{errs}
+请修正后重新输出完整的编排 JSON（同样格式、只输出 JSON）。画面文字只能是你自己的意象短词。"""
+
+
+def _check_comps(items, chars, hs):
+    """items: {id: payload} → {id: errors[]}；一次启动浏览器批量实测。"""
+    if not items:
+        return {}
+    docs = {k: HP.build_doc(v, chars) for k, v in items.items()}
+    hs.browser_checks += len(docs)
+    res = browser_check(docs)
+    if res is None:
+        for k in docs:
+            hs.warnings.append(f"[hero {k}] 没有 Chromium，只做了编排校验")
+        return {k: [] for k in docs}
+    out = {}
+    for k in docs:
+        r = res.get(k) or {"ok": False, "errors": ["校验器没有返回结果"]}
+        out[k] = [] if r.get("ok") else (r.get("errors") or ["未通过"])
+        hs.log.append({"id": k, "check": r.get("metrics"), "errors": r.get("errors", [])[:6]})
+    return out
+
+
+def run_prims(seg, plan, jobs, chars, hs, progress=lambda *a: None):
+    """原语模式：顺序编排（快、便于避免重复）→ 批量实测 → 修一次 → 规则编排 → 仍不合格才回退预制组件。"""
+    source = "".join(x["text"] for x in seg["segments"])
+    char_ids = {c["id"] for c in plan["characters"]}
+    E, P, M = {}, {}, {}           # entries, payloads, messages
+    used = {}                      # 章 → 本章已用过的原语（按次数上限去重复）
+    for fig, (hid, h) in enumerate(jobs, 1):
+        t0 = time.time()
+        sc = plan["scenes"][h["scene"]]
+        e = {"id": hid, "kind": "prims", "at": h["at"], "pos": "after", "scene": h["scene"], "zone": h.get("zone"), "title": h.get("title", ""),
+             "caption": h.get("caption") or h.get("title", ""), "seconds": h.get("seconds", 12), "tone": h.get("tone", "day"),
+             "desc": {k: h.get(k) for k in ("summary", "setting", "objects", "characters", "curve", "motif")},
+             "fallback": h.get("fallback"), "status": "fallback", "module": None, "comp": None, "attempts": 0, "errors": [], "_t": 0.0}
+        e["_data"] = {"series": HP.series_for(plan, sc["start"], sc["end"])}; e["_fig"] = fig
+        E[hid] = e
+        ch = hid.split("-")[0]; e["_ch"] = ch; e["_dt"] = HP.desc_text(h)
+        try:
+            o, msgs, perr = compose(h, plan, hs, used=used.get(ch, []))
+            e["attempts"] = 1
+            comp, errs = HP.validate(o, char_ids, source, e["_dt"], used.get(ch, [])) if perr is None else (None, [perr])
+            M[hid] = msgs
+            if errs:
+                e["errors"].append(errs[:8]); e["_need_fix"] = True
+            else:
+                P[hid] = comp
+                used.setdefault(ch, []).extend(x["prim"] for x in comp["shots"])
+        except planner.ContentFiltered:
+            hs.filtered += 1; e["errors"].append(["content_filter"]); e["_rule"] = True
+            hs.warnings.append(f"[hero {hid}] 编排被内容过滤拒答，改用规则编排")
+        except Exception as ex:
+            e["errors"].append([f"{type(ex).__name__}: {str(ex)[:200]}"]); e["_rule"] = True
+        e["_t"] += time.time() - t0
+
+    def payload(hid, comp):
+        e = E[hid]
+        return HP.page_payload(comp, e["_fig"], float(e["seconds"]), chars, e["_data"])
+
+    # round 1: browser check of first attempts
+    res = _check_comps({k: payload(k, c) for k, c in P.items()}, chars, hs)
+    for k, errs in res.items():
+        if errs:
+            E[k]["errors"].append(errs[:8]); E[k]["_need_fix"] = True; P.pop(k)
+        else:
+            E[k].update(status="ok", comp=P[k]); hs.passed_first += 1
+    # round 2: one fix
+    fixed = {}
+    for hid, e in E.items():
+        if not e.get("_need_fix") or e.get("_rule"):
+            continue
+        t0 = time.time()
+        try:
+            msgs = M[hid] + [{"role": "user", "content": COMPOSE_FIX.format(errs="\n".join(f"- {x}" for x in e["errors"][-1][:12]))}]
+            o, msgs, perr = compose(None, plan, hs, msgs=msgs)
+            e["attempts"] = 2
+            others = [x for k2, e2 in E.items() if k2 != hid and e2["_ch"] == e["_ch"] and k2 in P for x in (y["prim"] for y in P[k2]["shots"])]
+            comp, errs = HP.validate(o, char_ids, source, e["_dt"], others) if perr is None else (None, [perr])
+            if errs:
+                e["errors"].append(errs[:8]); e["_rule"] = True
+            else:
+                fixed[hid] = comp
+        except planner.ContentFiltered:
+            hs.filtered += 1; e["errors"].append(["content_filter"]); e["_rule"] = True
+        except Exception as ex:
+            e["errors"].append([f"{type(ex).__name__}: {str(ex)[:200]}"]); e["_rule"] = True
+        e["_t"] += time.time() - t0
+    res = _check_comps({k: payload(k, c) for k, c in fixed.items()}, chars, hs)
+    for k, errs in res.items():
+        if errs:
+            E[k]["errors"].append(errs[:8]); E[k]["_rule"] = True
+        else:
+            E[k].update(status="fixed", comp=fixed[k]); hs.passed_fixed += 1
+    # round 3: rule composition (always valid), still browser-checked
+    rules = {}
+    for hid, e in E.items():
+        if e["status"] in ("ok", "fixed"):
+            continue
+        others = [x for k2, e2 in E.items() if k2 != hid and e2["_ch"] == e["_ch"] and (e2.get("comp") or k2 in rules)
+                  for x in (y["prim"] for y in (e2.get("comp") or rules.get(k2))["shots"])]
+        rules[hid] = HP.rule_compose(dict(e["desc"], title=e["title"]), char_ids, source, others)
+    res = _check_comps({k: payload(k, c) for k, c in rules.items()}, chars, hs)
+    for k, errs in res.items():
+        if errs:
+            E[k]["errors"].append(["rule: " + x for x in errs[:6]]); hs.fallback += 1
+        else:
+            E[k].update(status="rule", comp=rules[k]); hs.rule += 1
+    out = []
+    unsafe = lambda x: not x or HP.leaks(x, source) or re.search(r"[你我吗呢吧啊呀]|^(?:别|不要|求)", x)
+    for n_, (hid, e) in enumerate(E.items(), 1):
+        # 标题/图注由选场景那步的模型写，可能直接用了原文台词（如“我喜欢你”）→ 换成编排的小标题 / 去掉
+        if unsafe(e["title"]):
+            e["title"] = next((x for x in [(e["comp"] or {}).get("slug", ""), str((e["desc"] or {}).get("motif") or "")[:10]] if x and not unsafe(x)), "")
+        if e.get("caption") and unsafe(e["caption"]):
+            e["caption"] = ""
+        if e["comp"]:
+            e["comp"] = payload(hid, e["comp"])
+            e["bytes"] = len(json.dumps(e["comp"], ensure_ascii=False).encode())
+        e["seconds_spent"] = round(e.pop("_t"), 1)
+        for k in [k for k in e if k.startswith("_")]:
+            e.pop(k)
+        out.append(e)
+        progress("hero+", f"{hid}「{e['title']}」{ {'ok': '通过', 'fixed': '修复后通过', 'rule': '规则编排', 'fallback': '回退预制组件'}[e['status']] }（{n_}/{len(E)}）")
+    return out
+
+
 def chapters_for(seg, plan):
     chs = seg.get("chapters") or plan.get("chapters") or []
     if len(chs) < 2:
@@ -554,10 +762,10 @@ def chapters_for(seg, plan):
     return chs
 
 
-def run(seg, plan, per_chapter=DEFAULT_PER_CHAPTER, progress=lambda *a: None, chapters=None):
+def run(seg, plan, per_chapter=DEFAULT_PER_CHAPTER, progress=lambda *a: None, chapters=None, mode=None):
     """给 plan 加上 plan["heroes"]；返回 HeroStats。plan 的其它部分不变。"""
     from .render import fix_colors
-    hs = HeroStats(); t0 = time.time()
+    hs = HeroStats(); t0 = time.time(); hs.mode = mode if mode in MODES else DEFAULT_MODE
     k = max(1, min(HERO_MAX_PER_CHAPTER, int(per_chapter)))
     chars = fix_colors([dict(c) for c in plan["characters"]])
     chs = chapters if chapters is not None else chapters_for(seg, plan)
@@ -570,6 +778,11 @@ def run(seg, plan, per_chapter=DEFAULT_PER_CHAPTER, progress=lambda *a: None, ch
         for j, h in enumerate(hl):
             jobs.append((f"h{ci + 1}-{j + 1}", h))
     hs.selected = len(jobs)
+    if hs.mode == "prims":
+        progress("hero", f"选出 {len(jobs)} 个关键场景，编排原语镜头")
+        plan["heroes"] = sorted(run_prims(seg, plan, jobs, chars, hs, progress), key=lambda e: (e["at"], e["id"]))
+        hs.seconds = round(time.time() - t0, 1)
+        return hs
     progress("hero", f"选出 {len(jobs)} 个关键场景，生成动画模块")
     heroes = []
     with cf.ThreadPoolExecutor(max_workers=workers) as ex:
@@ -596,8 +809,8 @@ def clean_fallback(fb):
     return {"type": fb["type"], "params": params}
 
 
-def sanitize_heroes(heroes, n):
-    """外部 / 复用 plan 里的 heroes：重新做静态检查，不合格的模块改为回退。"""
+def sanitize_heroes(heroes, n, char_ids=None, source=""):
+    """外部 / 复用 plan 里的 heroes：代码模块重新做静态检查；原语编排重新做编排校验（含原文重合检查）。不合格改为回退。"""
     out = []
     for h in heroes or []:
         if not isinstance(h, dict) or not isinstance(h.get("at"), int) or not (0 <= h["at"] < n):
@@ -605,6 +818,15 @@ def sanitize_heroes(heroes, n):
         h = dict(h)
         if h.get("module") and static_check(h["module"]):
             h["module"] = None; h["status"] = "fallback"
+        if h.get("comp"):
+            c = h["comp"] if isinstance(h["comp"], dict) else {}
+            ids = set(char_ids) if char_ids is not None else {x.get("id") for x in c.get("chars", []) if isinstance(x, dict)}
+            clean, errs = HP.validate(c, ids, source)
+            if errs:
+                h["comp"] = None; h["status"] = "fallback"
+            else:
+                h["comp"] = dict(c, shots=clean["shots"], slug=clean["slug"])
+                h["module"] = None
         h["fallback"] = clean_fallback(h.get("fallback"))
         h["pos"] = "before" if h.get("pos") == "before" else "after"
         try:

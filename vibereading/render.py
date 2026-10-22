@@ -2,6 +2,7 @@
 原文只以 html.escape 后的形式进入 <p data-src="i">，可加的只有包裹 span/a（textContent 不变）。"""
 import html, json, colorsys, pathlib, re
 from . import components as C
+from . import hero_prims as HP
 
 E = html.escape
 TPL = (pathlib.Path(__file__).parent / "template.html").read_text(encoding="utf-8")
@@ -178,15 +179,20 @@ def hero_block(h, chars):
     """关键场景动画：sticky 舞台 + 沙箱 iframe（父页面滚动时用 postMessage 传进度）。模块源码放在惰性的 JSON script 里，
     接近视口时才创建 iframe。装饰层（aria-hidden），不含原文。"""
     from . import hero as H
-    doc = H.wrap(h["module"], chars)
-    src = json.dumps(doc, ensure_ascii=False).replace("<", "\\u003c")   # 杜绝 </script> / <!-- 提前结束脚本块
+    if h.get("comp"):   # 原语编排：只放编排 JSON，原语库在页面里共用一份（#hs-lib）
+        src = json.dumps(h["comp"], ensure_ascii=False).replace("<", "\\u003c")
+        kind = "hs-comp"
+    else:
+        doc = H.wrap(h["module"], chars)
+        src = json.dumps(doc, ensure_ascii=False).replace("<", "\\u003c")   # 杜绝 </script> / <!-- 提前结束脚本块
+        kind = "hs-src"
     secs = float(h.get("seconds") or 12)
     length = round(1 + secs * 0.12, 2)      # 8s → 1.96 屏高，20s → 3.4 屏高（舞台 sticky，滚动距离 ≈ 高度 − 舞台高）
     title = E(h.get("title") or ""); cap_ = E(h.get("caption") or "")
     return (f'<figure class="hs" aria-hidden="true" data-hs="{E(h["id"])}" style="--len:{length}">'
             f'<div class="hs-stage"><div class="hs-frame"><span class="hs-ph"></span></div>'
             f'<figcaption><b>{title}</b>{(" · " + cap_) if cap_ and cap_ != title else ""}</figcaption></div>'
-            f'<script type="application/json" class="hs-src">{src}</script></figure>')
+            f'<script type="application/json" class="{kind}">{src}</script></figure>')
 
 
 def render(seg, plan, title=None, author=None, work=None, theme="paper"):
@@ -206,10 +212,26 @@ def render(seg, plan, title=None, author=None, work=None, theme="paper"):
         utt_by.setdefault(u["i"], []).append(u)
     # 关键场景动画（hero scenes）：合格的模块放沙箱 iframe；失败的回退为预制组件（插在同一位置）
     from . import hero as H
-    heroes = H.sanitize_heroes(plan.get("heroes"), n)
+    heroes = H.sanitize_heroes(plan.get("heroes"), n, {c["id"] for c in plan["characters"]}, "".join(x["text"] for x in segs))
+    # 首屏段 / 日期行 / 脚注 / 章名不渲染在场景流里：落在这些段上的 hero 挪到最近的正文段（同场景优先）
+    hidden = set()
+    for k in sorted(meta.get("hero_segments", [])):
+        if k == len(hidden) and segs[k]["role"] in ("text", "dateline") and len(segs[k]["text"]) <= 30:
+            hidden.add(k)
+    if not hidden and segs and segs[0]["role"] == "dateline":
+        hidden = {0}
+    for h in heroes:
+        if segs[h["at"]]["role"] != "text" or h["at"] in hidden:
+            sc = next((s for s in plan["scenes"] if s["start"] <= h["at"] <= s["end"]), None)
+            new = H.snap_text(seg, h["at"], sc["start"] if sc else 0, sc["end"] if sc else n - 1, hidden)
+            if segs[new]["role"] != "text" or new in hidden:
+                new = H.snap_text(seg, h["at"], 0, n - 1, hidden)
+            if new != h["at"]:
+                warnings.append(f"关键场景动画 {h.get('id')} 从段 {h['at']}（{segs[h['at']]['role']}）挪到正文段 {new}")
+                h["at"] = new
     hero_at = {}
     for h in heroes:
-        if h.get("module"):
+        if h.get("module") or h.get("comp"):
             hero_at.setdefault((h["at"], h.get("pos", "after")), []).append(("hero", h))
             near = [v for v in plan["visuals"] if abs(v["at"] - h["at"]) <= 1]
             if near:   # 动画旁边的预制组件会显得重复
@@ -330,6 +352,8 @@ def render(seg, plan, title=None, author=None, work=None, theme="paper"):
                 body.append(f'<section class="chapter" id="c{ck}" data-ch="{ck}" data-live="1">{inner}</section>')
             else:
                 body.append(f'<section class="chapter" id="c{ck}" data-ch="{ck}" hidden><template>{inner}</template></section>')
+    if any(h.get("comp") for h in heroes):
+        body.append('<script type="application/json" id="hs-lib">' + json.dumps(HP.prefix_doc(chars), ensure_ascii=False).replace("<", "\\u003c") + '</script>')
     if foot:
         fl = []
         for i in foot:

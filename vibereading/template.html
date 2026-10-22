@@ -404,7 +404,13 @@ const HS = new Set();
 const hsIO = new IntersectionObserver(es => es.forEach(e => {
   const el = e.target;
   if (e.isIntersecting && !el._f){
-    let doc = ''; try { doc = JSON.parse(el.querySelector('.hs-src').textContent); } catch(x){ return; }
+    let doc = '';
+    try {
+      const c = el.querySelector('.hs-comp');
+      if (c){ const lib = document.getElementById('hs-lib'); if (!lib) return;
+        doc = JSON.parse(lib.textContent) + '<script>VRP.mount(' + JSON.stringify(JSON.parse(c.textContent)).replace(/</g, '\\u003c') + ')<\/script></body></html>'; }
+      else doc = JSON.parse(el.querySelector('.hs-src').textContent);
+    } catch(x){ return; }
     const f = document.createElement('iframe');
     f.setAttribute('sandbox', 'allow-scripts'); f.setAttribute('aria-hidden', 'true'); f.setAttribute('tabindex', '-1');
     f.setAttribute('title', 'scene animation'); f.setAttribute('loading', 'eager'); f.setAttribute('referrerpolicy', 'no-referrer');

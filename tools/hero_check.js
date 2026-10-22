@@ -6,7 +6,7 @@
 const puppeteer = require('puppeteer-core'); const fs = require('fs');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LIMITS = { bytes: 40 * 1024, nonblank_mid: 0.008, nonblank_start: 0.004, scroll_changed: 0.025,
-  longtask_max: 250, longtask_ms: 600, p95: 90, reduced_diff: 0.006, nodes: 4000, night_bg_lum: 0.45 };
+  longtask_max: 250, longtask_ms: 600, p95: 90, reduced_diff: 0.006, nodes: 4000, night_bg_lum: 0.45, coverage: 0.012, contrast: 3.0 };
 
 const harness = (w, h, bg) => `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:${bg}">
 <div id="wrap" style="width:${w}px;height:${h}px;margin:20px 16px"><iframe id="f" sandbox="allow-scripts" title="hero" style="width:100%;height:100%;border:0;display:block"></iframe></div>
@@ -22,11 +22,17 @@ window.analyze = b64 => new Promise(res => { const im = new Image(); im.onload =
   let bk = 0, bc = -1; hist.forEach((c, k) => { if (c > bc){ bc = c; bk = k; } });
   const bg = [((bk >> 10) & 31) * 8 + 4, ((bk >> 5) & 31) * 8 + 4, (bk & 31) * 8 + 4];
   let ink = 0, strong = 0; const n = d.length / 4;
-  for (let i = 0; i < d.length; i += 4){ const dist = Math.abs(d[i]-bg[0]) + Math.abs(d[i+1]-bg[1]) + Math.abs(d[i+2]-bg[2]); if (dist > 40) ink++; if (dist > 110) strong++; }
+  const L = (r, g, b) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const Lbg = L(bg[0], bg[1], bg[2]); const far = [];
+  for (let i = 0; i < d.length; i += 4){ const dist = Math.abs(d[i]-bg[0]) + Math.abs(d[i+1]-bg[1]) + Math.abs(d[i+2]-bg[2]); if (dist > 40){ ink++; far.push(L(d[i], d[i+1], d[i+2])); } if (dist > 110) strong++; }
+  // 对比度：背景 vs 离背景最远的 2% 有效像素（文字/主体）的平均亮度，WCAG 公式
+  let contrast = 1;
+  if (far.length){ far.sort((a, b) => Math.abs(b - Lbg) - Math.abs(a - Lbg)); const k = Math.max(1, Math.floor(far.length * 0.02)); let m = 0; for (let i = 0; i < k; i++) m += far[i]; m /= k;
+    contrast = (Math.max(m, Lbg) + 0.05) / (Math.min(m, Lbg) + 0.05); }
   const cx = cv.getContext('2d'); cx.drawImage(im, 0, 0, W, H); const s = cx.getImageData(0, 0, W, H).data; const sig = [];
   for (let i = 0; i < s.length; i += 4) sig.push(Math.round(0.3 * s[i] + 0.59 * s[i+1] + 0.11 * s[i+2]));
   const lum = (0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2]) / 255;
-  res({nonblank: ink / n, strong: strong / n, bg_lum: +lum.toFixed(3), sig}); }; im.src = 'data:image/png;base64,' + b64; });
+  res({nonblank: ink / n, strong: strong / n, bg_lum: +lum.toFixed(3), contrast: +contrast.toFixed(2), sig}); }; im.src = 'data:image/png;base64,' + b64; });
 </script></body></html>`;
 const sigDiff = (a, b) => { let s = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) s += Math.abs(a[i] - b[i]); return s / (a.length || 1) / 255; };
 // 变化面积：128 宽缩略图里灰度变化 > 14 的像素占比（细线条的移动也能测到）
@@ -43,8 +49,11 @@ async function frame(page, p, theme, wait = 260){
   await page.evaluate((p, theme) => send({p, theme, force: true}), p, theme);
   await sleep(wait);
   const el = await page.$('#f');
-  const b64 = await el.screenshot({encoding: 'base64'});
-  return page.evaluate(b => analyze(b), b64);
+  let r = await page.evaluate(b => analyze(b), await el.screenshot({encoding: 'base64'}));
+  if (r.nonblank < LIMITS.nonblank_mid){   // 慢机器上偶尔截到还没画完的一帧：再等一下重截一次
+    await sleep(500); r = await page.evaluate(b => analyze(b), await el.screenshot({encoding: 'base64'}));
+  }
+  return r;
 }
 async function probe(page){
   await page.evaluate(() => send({t: 'probe'})); await sleep(120);
@@ -118,6 +127,12 @@ async function checkOne(b, mod){
   if (fr.p0 && fr.p0.nonblank < LIMITS.nonblank_start) errors.push('p=0 时画面几乎空白：开场就要有构图');
   for (const [k, label] of [['p5', '纸面主题 p=0.5'], ['p1', '纸面主题 p=1'], ['n5', '夜间主题 p=0.5'], ['n1', '夜间主题 p=1'], ['m5', '手机 p=0.5'], ['m1', '手机 p=1']])
     if (fr[k] && fr[k].nonblank < LIMITS.nonblank_mid) errors.push(`${label} 画面几乎空白（有效像素 ${(fr[k].nonblank * 100).toFixed(1)}%）：线条颜色要用 var(--ink)，并确认元素在可视区内`);
+  const cov = ['p05', 'p5', 'p95', 'p1'].filter(k => fr[k]).map(k => fr[k].nonblank);
+  if (cov.length){ m.coverage = +(cov.reduce((a, b) => a + b, 0) / cov.length).toFixed(4);
+    if (m.coverage < LIMITS.coverage) errors.push(`画面非空白占比太低（全程平均 ${(m.coverage * 100).toFixed(1)}%，至少 ${LIMITS.coverage * 100}%）：主体太小或太淡`); }
+  m.contrast = {p1: fr.p1 && fr.p1.contrast, n1: fr.n1 && fr.n1.contrast, p5: fr.p5 && fr.p5.contrast};
+  for (const [k, label] of [['p1', '纸面主题终态'], ['n1', '夜间主题终态']])
+    if (fr[k] && fr[k].nonblank >= LIMITS.nonblank_mid && fr[k].contrast < LIMITS.contrast) errors.push(`${label}对比度只有 ${fr[k].contrast}:1（至少 ${LIMITS.contrast}:1）：主体颜色和背景太接近`);
   if (fr.n5 && fr.n5.bg_lum > LIMITS.night_bg_lum) errors.push('夜间主题下背景仍是浅色：背景请用 var(--bg)，不要写死颜色');
   if (fr.p05 && fr.p95 && fr.p5){ m.scroll_changed = +changed(fr.p05.sig, fr.p95.sig).toFixed(4); m.scroll_changed_mid = +changed(fr.p05.sig, fr.p5.sig).toFixed(4);
     if (m.scroll_changed < LIMITS.scroll_changed) errors.push(`画面随滚动变化太小（p=0.05→0.95 只有 ${(m.scroll_changed * 100).toFixed(1)}% 的画面变化，至少要 ${LIMITS.scroll_changed * 100}%）：用 VRH.draw 逐笔画出、VRH.camera 推近、人物移动、光影变化，让每个节拍一眼可见`); }

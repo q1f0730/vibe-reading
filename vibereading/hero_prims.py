@@ -308,7 +308,7 @@ def rule_compose(h, char_ids, source="", used=None, allow=()):
     cands = [(("门", "玄关", "进门"), "door", {"word": word(*[o for o in objs if "门" in o], "门缝")}),
              (("车", "夜路", "开车"), "passing", {"word": title}),
              (("勺", "罐", "碗"), "spoon", {"word": word(*[o for o in objs if "勺" in o], "勺子"), "note": word(h.get("setting"), n=6)}),
-             (("窗", "光", "傍晚", "黄昏", "午后"), "window", {"word": title, "from": "noon", "to": "dusk"}),
+             (("窗", "光", "傍晚", "黄昏", "午后"), "window", {"word": title or "窗光", "from": "noon", "to": "dusk"}),
              (("脸红", "红晕", "羞", "烫", "秘密"), "ink", {"word": title[:4], "drops": 2 if "秘密" in text else 1}),
              (("回忆", "记忆", "照片", "告白"), "develop", {"word": title}),
              ((), "typeset", {"words": [title], "mode": "assemble"})]
@@ -333,7 +333,7 @@ def rule_compose(h, char_ids, source="", used=None, allow=()):
     if not second:
         alt = word(*objs[1:], h.get("motif"), "余音")
         for p_, pr in (("press", {"word": alt}), ("typeset", {"words": [alt], "mode": "mask"}), ("ink", {"word": alt[:4]}),
-                       ("window", {"word": alt, "from": "noon", "to": "dusk"}), ("chart", {"series": ["te", "in"]})):
+                       ("window", {"word": alt or "窗光", "from": "noon", "to": "dusk"}), ("chart", {"series": ["te", "in"]})):
             if p_ not in nope and p_ != lead["prim"]:
                 second = {"prim": p_, "params": pr}; break
     second = second or {"prim": "typeset", "params": {"words": [word(h.get("motif"), "余音")], "mode": "scatter"}}
@@ -342,7 +342,7 @@ def rule_compose(h, char_ids, source="", used=None, allow=()):
     comp, errs = validate({"slug": slug, "shots": shots}, char_ids, source, allow=allow)
     if errs:   # 极端情况（关键词全撞原文）：退到纯排版 + 窗光
         comp, _ = validate({"slug": "", "shots": [{"prim": "typeset", "from": 0, "to": .56, "params": {"words": ["此刻"], "mode": "assemble"}},
-                                                    {"prim": "window", "from": .48, "to": 1, "params": {"from": "noon", "to": "dusk"}}]}, char_ids, "")
+                                                    {"prim": "press", "from": .48, "to": 1, "params": {"word": "余音"}}]}, char_ids, "")
     return comp
 
 

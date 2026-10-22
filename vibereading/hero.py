@@ -729,14 +729,14 @@ def run_prims(seg, plan, jobs, chars, hs, progress=lambda *a: None):
         return errs
 
     def simple_comp(e):
-        """最后一道：纯排版 + 窗光（两个最稳的原语），只用安全的短词；每本书实测一次模板。"""
+        """最后一道：纯排版 + 压印（两个最稳、对比度最高的原语），只用安全的短词；每本书实测一次模板。"""
         w = next((x for x in [e["title"], short_title(e, allow, source, unsafe)] if x and not unsafe(x)), "此刻")[:4]
-        comp, errs = HP.validate({"slug": "", "shots": [{"prim": "typeset", "from": 0, "to": .56, "params": {"words": [w], "mode": "assemble"}},
-                                                        {"prim": "window", "from": .48, "to": 1, "params": {"from": "noon", "to": "dusk"}}]},
-                                 char_ids, source, allow=allow)
+        tail = "余音" if w != "余音" else "此刻"
+        shots = lambda w_: [{"prim": "typeset", "from": 0, "to": .56, "params": {"words": [w_], "mode": "assemble"}},
+                            {"prim": "press", "from": .48, "to": 1, "params": {"word": tail}}]
+        comp, errs = HP.validate({"slug": "", "shots": shots(w)}, char_ids, source, allow=allow)
         if errs:
-            comp, _ = HP.validate({"slug": "", "shots": [{"prim": "typeset", "from": 0, "to": .56, "params": {"words": ["此刻"], "mode": "assemble"}},
-                                                         {"prim": "window", "from": .48, "to": 1, "params": {"from": "noon", "to": "dusk"}}]}, char_ids, "")
+            comp, _ = HP.validate({"slug": "", "shots": shots("此刻")}, char_ids, "")
         return comp
 
     def one(fig, hid, h, used):

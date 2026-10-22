@@ -112,7 +112,7 @@ class Batch(unittest.TestCase):
         bad = {"ok": False, "errors": ["画面随滚动变化太小"], "metrics": {}}
         out, _ = self.run_prims(stats(FakePool(bad={"h1-1": bad})), jobs, FakeCompose())
         self.assertEqual(out[0]["status"], "simple")
-        self.assertEqual([s["prim"] for s in out[0]["comp"]["shots"]], ["typeset", "window"])
+        self.assertEqual([s["prim"] for s in out[0]["comp"]["shots"]], ["typeset", "press"])
 
     def test_budget_exhausted_rest_use_rule(self):
         jobs = make_jobs(self.seg, 1, 2) + [(f"h{c}-1", dict(SELECT_JSON["heroes"][0])) for c in range(2, 9)]
@@ -252,6 +252,19 @@ class RealBrowser(unittest.TestCase):
         self.assertTrue(r["g1"]["ok"], r["g1"]["errors"]); self.assertTrue(r["g2"]["ok"], r["g2"]["errors"])
         self.assertFalse(r["loop"]["ok"])
         self.assertLess(dt, 80)
+
+    def test_simple_template_and_wordless_rule_pass(self):
+        """简化版模板（排版 + 压印）与没有可用词时的规则编排都要能过实测（含终态对比度）。"""
+        chars = render.fix_colors([dict(c) for c in CHARS])
+        data = {"series": {"te": [.2, .5], "in": [.3, .6]}}
+        simple = comp(("typeset", 0, .56, {"words": ["浴室门"], "mode": "assemble"}), ("press", .48, 1, {"word": "余音"}))
+        src = "窗光傍晚此刻余音"          # 让候选词全部撞原文 → 走无词分支
+        rule = HP.rule_compose({"title": "傍晚", "summary": "傍晚的窗边", "objects": ["窗"]}, IDS, src)
+        docs = {k: HP.build_doc(HP.page_payload(HP.validate(c, IDS, "")[0], 1, 12, chars, data), chars) for k, c in (("simple", simple), ("rule", rule))}
+        with hero_checker.CheckerPool(concurrency=2, timeout=40) as p:
+            r = p.check(docs)
+        for k, v in r.items():
+            self.assertTrue(v["ok"], (k, v["errors"]))
 
 
 if __name__ == "__main__":

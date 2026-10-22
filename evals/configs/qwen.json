@@ -1,0 +1,2 @@
+{"name": "qwen", "label": "千问 qwen3.8-max（OpenAI 兼容）", "kind": "openai", "base_url": "https://maas.qianwenaiapi.com/compatible-mode/v1",
+ "model": "qwen3.8-max", "api_key_env": "DASHSCOPE_API_KEY", "reasoning": "off", "concurrency": 3, "timeout": 115, "max_total_seconds": 120}

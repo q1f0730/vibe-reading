@@ -351,6 +351,8 @@ def chapter_digest(seg, plan, a, b, title, with_snips=True):
 
 
 def _is_filtered(e):
+    if isinstance(e, planner.ContentFiltered):
+        return True
     if isinstance(e, urllib.error.HTTPError):
         try:
             body = e.read().decode("utf-8", "replace")[:400]
@@ -362,19 +364,24 @@ def _is_filtered(e):
 
 
 def _chat(msgs, max_tokens, stats, json_mode, effort=None):
-    return planner.chat(msgs, "mercury-3", max_tokens, stats, "mercury", json_mode=json_mode,
+    """hero 的所有调用都走 Engine（用户自己配置的模型 / 平台默认）。"""
+    return planner.chat(msgs, None, max_tokens, stats, None, json_mode=json_mode,
                         extra_override={"reasoning_effort": effort} if effort else None,
                         timeout=None if json_mode else 180)
 
 
 class HeroStats:
-    def __init__(self):
+    def __init__(self, engine=None):
         self.selected = 0; self.passed_first = 0; self.passed_fixed = 0; self.fallback = 0; self.filtered = 0; self.rule = 0; self.mode = DEFAULT_MODE
         self.gen_calls = 0; self.select_calls = 0; self.browser_checks = 0; self.log = []; self.warnings = []
-        self.llm = planner.Stats("mercury", "mercury-3")
+        self.engine = engine
+        self.max_shots = engine.strategy.hero_max_shots if engine else 4
+        self.llm = planner.Stats(engine.client.cfg.kind if engine else "mercury", engine.client.cfg.model if engine else "mercury-3", engine)
 
     def as_dict(self):
-        d = {k: v for k, v in self.__dict__.items() if k != "llm"}
+        d = {k: v for k, v in self.__dict__.items() if k not in ("llm", "engine")}
+        if self.engine is not None:
+            d["tier"] = self.engine.tier; d["model"] = self.engine.label
         d["llm_calls"] = self.llm.calls; d["tokens_out"] = self.llm.tokens_out; d["transient"] = self.llm.transient
         return d
 
@@ -468,12 +475,12 @@ def select(seg, plan, a, b, title, k, hs):
                 raw, fin = _chat(msgs, 3000, hs.llm, True)
                 o = planner.parse_json(raw)
                 break
-            except urllib.error.HTTPError as e:
+            except (urllib.error.HTTPError, planner.ContentFiltered) as e:
                 if _is_filtered(e):
                     hs.filtered += 1; hs.warnings.append(f"[hero select {a}-{b}] 内容过滤拒答" + ("，去掉短摘重试" if with_snips else "，本章不做 hero"))
                     snips = False
                     continue
-                hs.warnings.append(f"[hero select {a}-{b}] HTTP {e.code}"); o = None; break
+                hs.warnings.append(f"[hero select {a}-{b}] HTTP {getattr(e, 'code', '?')}"); o = None; break
             except Exception as e:
                 hs.warnings.append(f"[hero select {a}-{b}] {type(e).__name__}: {str(e)[:120]}"); o = None; break
         if not isinstance(o, dict):
@@ -514,7 +521,7 @@ def storyboard(desc, hs):
         raw, fin = _chat([{"role": "system", "content": BOARD_SYS}, {"role": "user", "content": "场景描述：\n" + desc}], 3500, hs.llm, True)
         o = planner.parse_json(raw or "")
         return json.dumps(o, ensure_ascii=False, separators=(",", ":"))[:6000] if isinstance(o, dict) and o.get("elements") else ""
-    except urllib.error.HTTPError as e:
+    except (urllib.error.HTTPError, planner.ContentFiltered) as e:
         if _is_filtered(e):
             raise planner.ContentFiltered("hero-board")
         return ""
@@ -533,7 +540,7 @@ def generate(h, plan, hs, msgs=None):
     hs.gen_calls += 1
     try:
         raw, fin = _chat(msgs, 14000, hs.llm, False, EFFORT)
-    except urllib.error.HTTPError as e:
+    except (urllib.error.HTTPError, planner.ContentFiltered) as e:
         if _is_filtered(e):
             raise planner.ContentFiltered("hero")
         raise
@@ -611,11 +618,12 @@ def compose(h, plan, hs, msgs=None, used=None):
     """模型只出编排 JSON。返回 (obj|None, messages, parse_error|None)；被内容过滤拒答抛 planner.ContentFiltered。"""
     if msgs is None:
         msgs = [{"role": "system", "content": HP.COMPOSE_SYS.format(catalog=HP.catalog())},
-                {"role": "user", "content": HP.compose_user(_desc_for_gen(h, plan), plan["characters"], used)}]
+                {"role": "user", "content": HP.compose_user(_desc_for_gen(h, plan), plan["characters"], used) +
+                 (f"\n\n镜头数：只用 2 个镜头（不要更多）。" if hs.max_shots <= 2 else (f"\n\n镜头数：2–{hs.max_shots} 个。" if hs.max_shots < 4 else ""))}]
     hs.gen_calls += 1
     try:
         raw, fin = _chat(msgs, 2500, hs.llm, True)
-    except urllib.error.HTTPError as e:
+    except (urllib.error.HTTPError, planner.ContentFiltered) as e:
         if _is_filtered(e):
             raise planner.ContentFiltered("hero-compose")
         raise
@@ -650,6 +658,16 @@ def _check_comps(items, chars, hs):
     return out
 
 
+def _guard_comp(comp, scene_text, hs):
+    """统一护栏（与模型无关）：镜头数不超过本档上限；画面意象词不能与场景原文毫无关联。"""
+    from . import quality
+    errs = []
+    if comp and len(comp.get("shots") or []) > hs.max_shots:
+        errs.append(f"镜头数 {len(comp['shots'])} 超过上限 {hs.max_shots}：请合并成 {hs.max_shots} 个以内")
+    errs += quality.hero_word_issues(comp, scene_text)
+    return errs
+
+
 def run_prims(seg, plan, jobs, chars, hs, progress=lambda *a: None):
     """原语模式：顺序编排（快、便于避免重复）→ 批量实测 → 修一次 → 规则编排 → 仍不合格才回退预制组件。"""
     source = "".join(x["text"] for x in seg["segments"])
@@ -664,12 +682,14 @@ def run_prims(seg, plan, jobs, chars, hs, progress=lambda *a: None):
              "desc": {k: h.get(k) for k in ("summary", "setting", "objects", "characters", "curve", "motif")},
              "fallback": h.get("fallback"), "status": "fallback", "module": None, "comp": None, "attempts": 0, "errors": [], "_t": 0.0}
         e["_data"] = {"series": HP.series_for(plan, sc["start"], sc["end"])}; e["_fig"] = fig
+        e["_st"] = "".join(seg["segments"][i]["text"] for i in range(sc["start"], sc["end"] + 1))
         E[hid] = e
         ch = hid.split("-")[0]; e["_ch"] = ch; e["_dt"] = HP.desc_text(h)
         try:
             o, msgs, perr = compose(h, plan, hs, used=used.get(ch, []))
             e["attempts"] = 1
             comp, errs = HP.validate(o, char_ids, source, e["_dt"], used.get(ch, [])) if perr is None else (None, [perr])
+            errs = errs or _guard_comp(comp, e["_st"], hs)
             M[hid] = msgs
             if errs:
                 e["errors"].append(errs[:8]); e["_need_fix"] = True
@@ -706,6 +726,7 @@ def run_prims(seg, plan, jobs, chars, hs, progress=lambda *a: None):
             e["attempts"] = 2
             others = [x for k2, e2 in E.items() if k2 != hid and e2["_ch"] == e["_ch"] and k2 in P for x in (y["prim"] for y in P[k2]["shots"])]
             comp, errs = HP.validate(o, char_ids, source, e["_dt"], others) if perr is None else (None, [perr])
+            errs = errs or _guard_comp(comp, e["_st"], hs)
             if errs:
                 e["errors"].append(errs[:8]); e["_rule"] = True
             else:
@@ -762,15 +783,21 @@ def chapters_for(seg, plan):
     return chs
 
 
-def run(seg, plan, per_chapter=DEFAULT_PER_CHAPTER, progress=lambda *a: None, chapters=None, mode=None):
-    """给 plan 加上 plan["heroes"]；返回 HeroStats。plan 的其它部分不变。"""
+def run(seg, plan, per_chapter=DEFAULT_PER_CHAPTER, progress=lambda *a: None, chapters=None, mode=None, engine=None):
+    """给 plan 加上 plan["heroes"]；返回 HeroStats。plan 的其它部分不变。
+    engine：用户配置的模型（None = 平台 Mercury）。档位决定每章上限、镜头数；代码模式只对探针通过的 A 档开放。"""
     from .render import fix_colors
-    hs = HeroStats(); t0 = time.time(); hs.mode = mode if mode in MODES else DEFAULT_MODE
-    k = max(1, min(HERO_MAX_PER_CHAPTER, int(per_chapter)))
+    if engine is None:
+        from . import tiers
+        engine = tiers.platform_engine("mercury")
+    hs = HeroStats(engine); t0 = time.time(); hs.mode = mode if mode in MODES else DEFAULT_MODE
+    if hs.mode == "code" and not engine.strategy.code_mode:
+        hs.warnings.append(f"代码模式只对通过探针的 A 档模型开放（当前 {engine.tier} 档），改用原语模式"); hs.mode = "prims"
+    k = max(1, min(HERO_MAX_PER_CHAPTER, int(per_chapter), engine.strategy.hero_per_chapter))
     chars = fix_colors([dict(c) for c in plan["characters"]])
     chs = chapters if chapters is not None else chapters_for(seg, plan)
     progress("hero", f"关键场景动画：{len(chs)} 章 × ≤{k} 个")
-    workers = max(1, int(os.environ.get("VR_LLM_CONCURRENCY", 3)))
+    workers = max(1, min(engine.client.cfg.concurrency, int(os.environ.get("VR_LLM_CONCURRENCY", 3))))
     with cf.ThreadPoolExecutor(max_workers=workers) as ex:
         sels = list(ex.map(lambda c: select(seg, plan, c["start"], c["end"], c.get("title", ""), k, hs), chs))
     jobs = []

@@ -1,0 +1,271 @@
+{
+ "name": "qwen",
+ "label": "千问 qwen3.8-max（OpenAI 兼容）",
+ "model": "qwen3.8-max",
+ "kind": "openai",
+ "simulate": {},
+ "force_tier": null,
+ "probe": {
+  "version": 1,
+  "at": 1792639833,
+  "kind": "openai",
+  "model": "qwen3.8-max",
+  "base_url": "https://maas.qianwenaiapi.com/compatible-mode/v1",
+  "errors": [],
+  "ok": true,
+  "latency": 1.61,
+  "json_mode": true,
+  "json_schema": true,
+  "json_prompt": true,
+  "tools": true,
+  "max_output_ok": 32000,
+  "context_ok": 27332,
+  "zh_long": 1.0,
+  "filter_blocked": 0,
+  "reasoning": false,
+  "reasoning_tokens": 0,
+  "adaptations": [],
+  "tier": "A",
+  "tier_reasons": [
+   "全部 A 档条件满足"
+  ],
+  "code_mode_ok": true,
+  "seconds": 32.7,
+  "calls": 12,
+  "tokens_out": 2057
+ },
+ "probe_detail": {
+  "ping": {
+   "ok": true,
+   "sec": 3.23,
+   "latency": 1.61,
+   "reasoning": false,
+   "reply": "OK"
+  },
+  "json_mode": {
+   "ok": true,
+   "sec": 1.49,
+   "native": true
+  },
+  "json_prompt": {
+   "ok": true,
+   "sec": 1.65
+  },
+  "json_schema": {
+   "ok": true,
+   "sec": 1.82,
+   "via_tool": false
+  },
+  "tools": {
+   "ok": true,
+   "sec": 1.51
+  },
+  "context": {
+   "ok": true,
+   "sec": 1.78,
+   "chars": 21025,
+   "context_ok": 27332
+  },
+  "zh_long": {
+   "ok": true,
+   "sec": 3.34,
+   "score": 1.0,
+   "coverage": 1.0,
+   "verbatim_quote": true
+  },
+  "filter": {
+   "ok": true,
+   "sec": 3.19,
+   "blocked": 0,
+   "of": 2
+  },
+  "max_output": {
+   "ok": true,
+   "sec": 27.8,
+   "accepted": 32000,
+   "produced_tokens": 1836,
+   "items": 160,
+   "max_output_ok": 32000
+  }
+ },
+ "probe_seconds": 32.7,
+ "strategy": {
+  "tier": "A",
+  "batch_paras": 28,
+  "batch_chars": 4783,
+  "outline_budget": 9566,
+  "book_segs": 200,
+  "pseudo_chapter": 120,
+  "prompt": "full",
+  "few_shot": 0,
+  "structured": "schema",
+  "enum_in_prompt": false,
+  "repair_rounds": 1,
+  "detail_max_tokens": 8000,
+  "visuals_per_scene": 3,
+  "hero_per_chapter": 3,
+  "hero_max_shots": 4,
+  "code_mode": true,
+  "concurrency": 4
+ },
+ "pipeline_seconds": 149.9,
+ "quality": {
+  "version": 1,
+  "model": "qwen3.8-max",
+  "model_label": "千问 qwen3.8-max（OpenAI 兼容）",
+  "tier": "A",
+  "source": "eval",
+  "overall": 93.9,
+  "scores": {
+   "schema": 100.0,
+   "schema_first_pass": 100.0,
+   "verbatim": 100.0,
+   "coverage": 100.0,
+   "scenes": 100.0,
+   "visual_consistency": 95.7,
+   "diversity": 65.9,
+   "hero": 80.0
+  },
+  "floor_ok": true,
+  "floor": {
+   "verbatim_100": true,
+   "no_missing_text": true,
+   "plan_complete": true,
+   "visuals_consistent_after_guard": true,
+   "heroes_render_ok": true,
+   "browser_verify": true
+  },
+  "degraded_paragraph_ratio": 0.0,
+  "rule_paragraphs": 0,
+  "scene_distribution": {
+   "scenes": 13,
+   "min": 2,
+   "max": 15,
+   "median": 8,
+   "avg": 8.5,
+   "contiguous": true,
+   "rule_named": 0,
+   "score": 100.0
+  },
+  "diversity": {
+   "visuals": 22,
+   "visual_types": 7,
+   "component_diversity": 0.318,
+   "hero_shots": 6,
+   "hero_prims": 6,
+   "prim_diversity": 1.0
+  },
+  "hero": {
+   "count": 2,
+   "status": {
+    "ok": 1,
+    "fixed": 1
+   },
+   "model_pass_rate": 1.0,
+   "degraded_rate": 0.0,
+   "imagery_consistency": 0.6
+  },
+  "guard": {
+   "visuals_total": 23,
+   "inconsistent": 1,
+   "capped": 0,
+   "caption_leaks": 1,
+   "kept": 22
+  },
+  "verbatim": {
+   "segments": 110,
+   "matched": 110,
+   "missing": [],
+   "missing_count": 0,
+   "mismatch": [],
+   "identical": true
+  },
+  "verify": {
+   "ok": true,
+   "text_identical": true,
+   "matched": 110,
+   "segments": 110,
+   "js_errors": [],
+   "external_requests": []
+  },
+  "cost": {
+   "calls": 13,
+   "plan_calls": 9,
+   "hero_calls": 4,
+   "tokens_out": 10816,
+   "tokens_in": 34792,
+   "reasoning_tokens": 0,
+   "retries": 3,
+   "transient": 0,
+   "content_filtered": 0,
+   "fallbacks": 0
+  },
+  "seconds": 149.8,
+  "adaptations": []
+ },
+ "verify": {
+  "ok": true,
+  "segments": 110,
+  "chapter_mode": false,
+  "text_identical": true,
+  "mismatches": [],
+  "matched": 110,
+  "overflow": {
+   "390": {
+    "scrollWidth": 390,
+    "innerWidth": 390,
+    "ok": true,
+    "offenders": []
+   },
+   "1280": {
+    "scrollWidth": 1280,
+    "innerWidth": 1280,
+    "ok": true,
+    "offenders": []
+   }
+  },
+  "external_requests": [],
+  "js_errors": []
+ },
+ "hero": {
+  "selected": 2,
+  "passed_first": 1,
+  "passed_fixed": 1,
+  "rule": 0,
+  "fallback": 0,
+  "filtered": 0,
+  "llm_calls": 4,
+  "tokens_out": 1267,
+  "mode": "prims",
+  "warnings": []
+ },
+ "warnings": [
+  "[detail 17-44] 仍有 1 个组件与原文不符，交给护栏去掉",
+  "组件 object@30 参数 ['thing'] 不合法，已改用默认值",
+  "组件 timeline@52 参数 ['labels'] 不合法，已改用默认值",
+  "组件 timeline@63 参数 ['labels'] 不合法，已改用默认值",
+  "组件 interior@68 参数 ['props'] 不合法，已改用默认值",
+  "护栏：去掉与原文不符的组件 sound@23 附近原文没有“笑/声/喊”"
+ ],
+ "text": "evals/texts/zhufu.txt",
+ "at": "2026-10-22 03:33:35",
+ "row": {
+  "tier": "A",
+  "overall": 93.9,
+  "floor_ok": true,
+  "schema": 100.0,
+  "schema_first_pass": 100.0,
+  "verbatim": 100.0,
+  "degraded": "0.0%",
+  "scenes": 100.0,
+  "scene_n": 13,
+  "missing": 0,
+  "visual_consistency": 95.7,
+  "prim_diversity": 1.0,
+  "hero": "1.0/0.0",
+  "richness": "22/2",
+  "seconds": 149.8,
+  "calls": 13,
+  "tokens_out": 10816
+ }
+}

@@ -81,6 +81,22 @@ MIGRATIONS = [
     );
     CREATE INDEX login_attempts_key ON login_attempts(key, ts);
     """,
+    # v2：用户自己的模型（key 只存 AES-GCM 密文）+ 质量报告
+    """
+    CREATE TABLE model_configs (
+        user_id      INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        config_json  TEXT NOT NULL,              -- kind/base_url/model/选项（不含 key）
+        key_enc      TEXT,                       -- v1:<AES-GCM 密文>，主密钥来自环境变量 VR_SECRET_KEY
+        key_hint     TEXT,                       -- 掩码（…abcd），只用于界面提示
+        profile_json TEXT,                       -- 能力档案（探针结果）
+        tier         TEXT,                       -- A / B / C
+        status       TEXT NOT NULL DEFAULT 'probing' CHECK (status IN ('probing','ready','failed')),
+        error        TEXT,
+        updated_at   REAL NOT NULL
+    );
+    ALTER TABLE books ADD COLUMN quality_json TEXT;
+    ALTER TABLE books ADD COLUMN tier TEXT;
+    """,
 ]
 
 _local = threading.local()

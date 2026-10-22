@@ -19,3 +19,5 @@ __pycache__/
 .env
 .env.*
 *.key
+# 评测：分数卡（*.json / SCORECARD.md）进仓库，生成的页面与中间文件不进
+evals/results/*/

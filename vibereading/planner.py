@@ -1,41 +1,35 @@
-"""Stage 2 · 规划：千问只输出分镜 JSON（不输出正文）。
+"""Stage 2 · 规划：模型只输出分镜 JSON（不输出正文）。模型可由用户自己配置（llm.py + tiers.py），这里与具体提供方无关。
 
 两步：
   A. outline（1 次调用）：元信息、人物表、焦点关系、场景划分。
   B. detail（按场景分批，并行）：每段说话人/在场/情绪、句内对话归属、视觉节点、摘句。
-每次调用：JSON schema + 语义校验，不合格把错误回灌重试一次；仍不合格则规则修复并记录 warning。
-网关单请求 120s 硬上限 → enable_thinking=false、max_tokens 有上限、每批 ≤ 28 段 / 5000 字。
+每次调用：结构化输出（schema / JSON 模式 / 提示词，按能力档案取最强可用）→ JSON schema + 语义校验 → 不合格把错误回灌修复
+（轮数按档位）；仍不合格则规则修复并记录 warning。批次大小、提示词详细度、few-shot、上下文切块都由 Engine.strategy 决定。
 
-整本书（≥2 章且 ≥15000 字，或 >200 段）走 plan_book：
+整本书（≥2 章且 ≥15000 字，或段数超过本档的 book_segs）走 plan_book：
   0. cast（1 次）：每章开头摘样 → 全书人物表 / 焦点关系 / 元信息。
-  A'. 每章一次 outline（只划分本章场景），B. 每章的 detail 批次 —— 章与章并发，所有 HTTP 调用共用一个
-     并发闸（VR_LLM_CONCURRENCY，默认 3）；429/5xx/超时指数退避重试；单章异常只让这一章降级为规则分镜。
-  内容过滤拒答：有千问 key → 本批改用千问；没有 → 批次对半拆开重试（最多拆两层），仍被拒的段落用规则化默认分镜
+  A'. 每章一次 outline（只划分本章场景），B. 每章的 detail 批次 —— 章与章并发，所有 HTTP 调用共用该模型的并发闸；
+     429/5xx/超时指数退避重试；单章异常只让这一章降级为规则分镜。
+  内容过滤拒答：Engine 有兜底模型 → 本批改用兜底；没有 → 批次对半拆开重试（最多拆两层），仍被拒的段落用规则化默认分镜
   （按人名+说/问/道判断说话人、场景内出现过的人名算在场、中性数值），绝不复制上一段。
 """
 import json, math, re, threading, time, urllib.request, urllib.error, concurrent.futures as cf
 import jsonschema
 from .registry import COMPONENTS, HERO_MOTIFS, TONES, prompt_catalog
+from . import llm, tiers, quality
 
 import os
 
-# provider 配置：凭证由网关按 host 注入；若本地直连，可设环境变量（代码与日志里不出现 key）。
+# 兼容旧接口：mercury / qwen 两个平台模型（凭证只来自服务器环境变量 / 网关注入，代码与日志里不出现 key）
 PROVIDERS = {
-    "qwen": {   # 质量模式
-        "endpoint": "https://maas.qianwenaiapi.com/compatible-mode/v1/chat/completions",
-        "model": "qwen3.8-max", "fallback": "qwen3.7-plus", "key_env": "DASHSCOPE_API_KEY",
-        "extra": {"enable_thinking": False, "temperature": 0.4},
-        "reasoning_headroom": 0, "timeout": 115,
-    },
-    "mercury": {  # 快速模式（默认）：扩散式 LLM，带 reasoning_tokens，会吃掉 max_tokens → 额外留足余量
-        "endpoint": "https://api.inceptionlabs.ai/v1/chat/completions",
-        "model": "mercury-3", "fallback": "mercury-3", "key_env": "INCEPTION_API_KEY",
-        # 文档：mercury-3 温度 0.5–1.0；reasoning_effort instant|low|medium|high；最大输出 131072。
-        "extra": {"temperature": 0.5, "reasoning_effort": "instant"},  # 实测 low 仍有 ~90% reasoning_tokens、耗时≈千问；instant 无推理、快 3 倍
-        "reasoning_headroom": 12000, "timeout": 90, "max_key": "max_completion_tokens",
-    },
+    "qwen": {"endpoint": llm.PLATFORM["qwen"]["base_url"] + "/chat/completions", "model": "qwen3.8-max", "fallback": "qwen3.7-plus",
+             "key_env": "DASHSCOPE_API_KEY", "extra": {"enable_thinking": False, "temperature": 0.4}},
+    "mercury": {"endpoint": llm.PLATFORM["mercury"]["base_url"] + "/chat/completions", "model": "mercury-3", "fallback": "mercury-3",
+                "key_env": "INCEPTION_API_KEY", "extra": {"temperature": 0.5, "reasoning_effort": "instant"}},
 }
 DEFAULT_PROVIDER = "mercury"
+ContentFiltered = llm.ContentFiltered
+_sleep_for = llm._sleep_for
 
 
 def resolve_model(spec):
@@ -50,77 +44,47 @@ def resolve_model(spec):
     raise ValueError(f"未知模型/提供方：{spec}（可用 mercury / qwen / 具体模型名）")
 
 
+def engine_for(model_spec=None, effort=None):
+    """CLI / 旧调用：平台模型名 → Engine。"""
+    provider, model = resolve_model(model_spec)
+    reasoning = effort if (effort and provider == "mercury") else None
+    return tiers.platform_engine(provider, model if model != PROVIDERS[provider]["model"] else None, reasoning)
+
+
 class Stats:
-    def __init__(self, provider="", model=""):
+    def __init__(self, provider="", model="", engine=None):
         self.provider = provider; self.model = model
-        self.effort = PROVIDERS.get(provider, {}).get("extra", {}).get("reasoning_effort")
+        self.engine = engine
+        self.effort = engine.client.reason_level if engine else None
+        self.tier = engine.tier if engine else None
         self.calls = 0; self.retries = 0; self.failed = 0; self.tokens_in = 0; self.tokens_out = 0; self.reasoning_tokens = 0
         self.tasks = 0; self.first_pass = 0; self.passed = 0; self.fallbacks = 0
         self.transient = 0; self.content_filtered = 0; self.rule_paras = 0; self.rule_scenes_chapters = 0   # JSON 合格率：首次合格 / 最终合格 / 任务数
+        self.dropped_visuals = 0
         self.warnings = []; self.log = []
 
     def as_dict(self):
-        return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+        d = {k: v for k, v in self.__dict__.items() if not k.startswith("_") and k != "engine"}
+        if self.engine is not None:
+            d["engine"] = self.engine.describe()
+        return d
 
 
-_LLM_SEM = threading.BoundedSemaphore(max(1, int(os.environ.get("VR_LLM_CONCURRENCY", 3))))
-RETRY_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 529}
-MAX_TRANSIENT = int(os.environ.get("VR_LLM_RETRIES", 8))   # 实测 Mercury 免费档整本书会遇到上百次 429
-
-
-class ContentFiltered(Exception):
-    """提供方内容过滤拒答（同样内容重试没有意义）。"""
-
-
-def _sleep_for(attempt, retry_after=None):
-    try:
-        if retry_after:
-            return min(30.0, float(retry_after))
-    except ValueError:
-        pass
-    return min(30.0, 2.0 * (2 ** attempt)) * (0.75 + 0.5 * (hash((attempt, time.time())) % 100) / 100)
-
-
-def chat(messages, model, max_tokens, stats, provider="qwen", json_mode=True, extra_override=None, timeout=None):
-    """一次 LLM 调用。限流（429）/ 5xx / 网络超时在这里退避重试，不消耗"格式不合格重试"的次数。
-    json_mode=False：自由文本输出（hero 动画模块）；extra_override 只作用于本次调用。"""
-    cfg = PROVIDERS[provider]
-    body = {"model": model, "messages": messages, cfg.get("max_key", "max_tokens"): max_tokens + cfg["reasoning_headroom"],
-            **cfg["extra"], **(extra_override or {})}
-    if json_mode:
-        body["response_format"] = {"type": "json_object"}
-    key = os.environ.get(cfg["key_env"]) or "injected-by-gateway"
-    data = json.dumps(body).encode()
-    for attempt in range(MAX_TRANSIENT + 1):
-        req = urllib.request.Request(cfg["endpoint"], data=data,
-                                     headers={"Content-Type": "application/json", "Authorization": "Bearer " + key})
-        t = time.time()
-        with _LLM_SEM:
-            stats.calls += 1
-            try:
-                with urllib.request.urlopen(req, timeout=timeout or cfg["timeout"]) as r:
-                    d = json.loads(r.read())
-                break
-            except urllib.error.HTTPError as e:
-                if e.code in RETRY_STATUS and attempt < MAX_TRANSIENT:
-                    ra = e.headers.get("Retry-After") if e.headers else None
-                    stats.transient += 1; stats.log.append({"model": model, "transient": f"HTTP {e.code}", "attempt": attempt + 1})
-                    wait = _sleep_for(attempt, ra)
-                else:
-                    raise
-            except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
-                if attempt < MAX_TRANSIENT:
-                    stats.transient += 1; stats.log.append({"model": model, "transient": type(e).__name__, "attempt": attempt + 1})
-                    wait = _sleep_for(attempt)
-                else:
-                    raise
-        time.sleep(wait)   # 退避时不占并发名额
-    u = d.get("usage", {}) or {}
-    rt = ((u.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0)
-    stats.tokens_in += u.get("prompt_tokens", 0); stats.tokens_out += u.get("completion_tokens", 0); stats.reasoning_tokens += rt
-    stats.log.append({"model": model, "sec": round(time.time() - t, 1), "out_tokens": u.get("completion_tokens"),
-                      "reasoning_tokens": rt, "finish": d["choices"][0].get("finish_reason")})
-    return d["choices"][0]["message"]["content"], d["choices"][0].get("finish_reason")
+def chat(messages, model=None, max_tokens=2000, stats=None, provider=None, json_mode=True, extra_override=None, timeout=None,
+         client=None, schema=None):
+    """一次 LLM 调用 → (text, finish)。调用端优先级：client 参数 > stats.engine.client > 平台 provider。
+    限流 / 5xx / 超时 / 参数不被接受 / 推理吃光输出 都在 llm.Client 里处理；内容过滤抛 ContentFiltered。"""
+    eng = getattr(stats, "engine", None)
+    if client is None:
+        if eng is not None and provider in (None, "engine"):
+            client = eng.client
+        else:
+            p, m = resolve_model(provider or DEFAULT_PROVIDER)
+            client = llm.platform_client(p, model if model and model != PROVIDERS[p]["model"] else None)
+    if extra_override and extra_override.get("reasoning_effort") and client.dialect == "mercury" and (eng is None or eng.source == "platform"):
+        client = llm.platform_client("mercury", client.cfg.model if client.cfg.model != "mercury-3" else None, extra_override["reasoning_effort"])
+    res = client.complete(messages, max_tokens, json_mode=json_mode, schema=schema, timeout=timeout, stats=stats)
+    return res.text, res.finish
 
 
 def parse_json(s):
@@ -145,6 +109,9 @@ def parse_json(s):
     return merged
 
 
+PALETTE = ["#2b4a6f", "#6b3e26", "#3d5a3a", "#5a3d6b", "#7a5a1e", "#24605f", "#7a2e3b", "#4a4a4a", "#355c8a", "#6b5a3d"]
+
+
 def normalize(o):
     """只做无歧义的类型修正（"81"→81、"0.5"→0.5），不猜内容。"""
     def num(x, f):
@@ -152,14 +119,32 @@ def normalize(o):
             try: return f(x.strip())
             except ValueError: return x
         return x
+    if isinstance(o, dict):
+        # 有的模型（尤其走 tool / 结构化输出时）把数组字段写成 JSON 字符串："visuals": "[{…}]"
+        for k in ("paras", "utterances", "visuals", "quotes", "scenes", "characters", "focal_pair"):
+            v = o.get(k)
+            if isinstance(v, str) and v.strip()[:1] in "[{":
+                try:
+                    pv = json.loads(v)
+                    o[k] = pv if isinstance(pv, list) else [pv]
+                except json.JSONDecodeError:
+                    pass
+        if isinstance(o.get("characters"), list):   # 缺颜色：按固定色板补（只是格式默认值，不猜内容）
+            for n, c in enumerate(o["characters"]):
+                if isinstance(c, dict) and not (isinstance(c.get("color"), str) and re.fullmatch(r"#[0-9a-fA-F]{6}", c["color"])):
+                    c["color"] = PALETTE[n % len(PALETTE)]
     if isinstance(o, dict) and isinstance(o.get("paras"), list):
-        KEYS = (("i", "idx", "index"), ("sp", "speaker"), ("present", "pr"), ("intimacy", "in"), ("tension", "te"),
-                ("blush", "bl"), ("blush_id", "bw", "blush_who"))
-        def arr(d):  # {'i':44,'sp':'',...} → [44,'',...]（键名明确时才转换）
+        KEYS = (("i", "idx", "index", "para", "p"), ("sp", "speaker", "who_speaks", "spk"), ("present", "pr", "with", "in_scene", "chars"),
+                ("intimacy", "in", "int", "close"), ("tension", "te", "ten", "stress"),
+                ("blush", "bl", "emb", "embarrass", "shame"), ("blush_id", "bw", "blush_who", "who", "emb_who"))
+        DEFAULTS = (None, "", [], 0.3, 0.2, 0.0, "")
+        def arr(d):  # {'i':44,'sp':'',...} → [44,'',...]：段号必须有，其余缺省用中性默认值
             out = []
-            for ks in KEYS:
+            for ks, dv in zip(KEYS, DEFAULTS):
                 k = next((k for k in ks if k in d), None)
-                if k is None: return d
+                if k is None:
+                    if dv is None: return d
+                    out.append(dv if not isinstance(dv, list) else []); continue
                 out.append(d[k])
             return out
         o["paras"] = [arr(p) if isinstance(p, dict) else p for p in o["paras"]]
@@ -167,8 +152,9 @@ def normalize(o):
             if isinstance(p, list) and len(p) == 7:
                 p[0] = num(p[0], int)
                 for k in (3, 4, 5): p[k] = num(p[k], float)
-                if p[1] is None: p[1] = ""
-                if p[6] is None: p[6] = ""
+                if p[1] in (None, 0, False): p[1] = ""        # 有的模型用 0 / null 表示“无”
+                if p[6] in (None, 0, False): p[6] = ""
+                if isinstance(p[2], str): p[2] = [p[2]] if p[2] else []
         # 有的模型把对象写成数组：[i, q, sp] / [at, text]
         if isinstance(o.get("utterances"), list):
             # [364, {"i":364,"q":…,"sp":…}] 这种"段号 + 对象"的写法 → 取对象
@@ -188,49 +174,69 @@ def normalize(o):
     return o
 
 
-def call_validated(messages, schema, semantic, model, max_tokens, stats, tag, provider="qwen"):
-    """call → parse → schema → semantic；失败把错误回灌重试一次。返回 (obj, errors)。"""
+PROMPT_JSON_ONLY = "\n\n【输出格式】只输出一个 JSON 对象：以 { 开头、以 } 结尾；不要代码块标记、不要任何解释文字。"
+
+
+def call_validated(messages, schema, semantic, model, max_tokens, stats, tag, provider=None, client=None):
+    """call → parse → schema → semantic；失败把错误回灌修复（轮数按档位）。返回 (obj, errors)。
+    结构化约束按 Engine.strategy.structured：schema（提供方结构化输出）/ json（JSON 模式）/ prompt（只靠提示词 + 宽松解析）。"""
     errs = []; obj = None; stats.tasks += 1
-    for attempt in range(2):
+    eng = getattr(stats, "engine", None)
+    strat = eng.strategy if eng is not None else tiers.strategy_for("A")
+    use_schema = schema if strat.structured == "schema" else None
+    json_mode = strat.structured in ("schema", "json")
+    if strat.structured == "prompt" and messages and messages[0]["role"] == "system":
+        messages = [dict(messages[0], content=messages[0]["content"] + PROMPT_JSON_ONLY)] + list(messages[1:])
+    cur = client
+    mt = max_tokens
+    cap = max(max_tokens, min(16000, int((eng.profile.get("max_output_ok") if eng is not None else 0) or 16000)))
+    for attempt in range(1 + max(0, strat.repair_rounds)):
         msgs = list(messages)
         if errs:
             stats.retries += 1
             msgs += [{"role": "user", "content": "上一次输出不合格，错误如下，请完整重新输出合格的 JSON：\n- " + "\n- ".join(errs[:15])}]
         try:
-            raw, finish = chat(msgs, model, max_tokens, stats, provider)
+            raw, finish = chat(msgs, model, mt, stats, provider, json_mode=json_mode, client=cur, schema=use_schema)
             if finish == "length":
+                mt = min(cap, mt * 2)          # 下一轮给更大的输出上限（不超过探针测出的可靠输出）
                 raise ValueError("输出被截断(length)，请更紧凑地输出")
             obj = parse_json(raw)
-        except urllib.error.HTTPError as e:
-            try: detail = e.read().decode("utf-8", "replace")[:200]
-            except Exception: detail = ""
-            errs = [f"HTTP {e.code}"]; stats.log.append({"tag": tag, "error": errs[0], "detail": detail})
-            if "content_filter" in detail and provider != "qwen":
+        except (ContentFiltered, urllib.error.HTTPError) as e:
+            if isinstance(e, urllib.error.HTTPError):      # 测试替身直接抛 HTTPError
+                try: detail = e.read().decode("utf-8", "replace")[:200]
+                except Exception: detail = ""
+                if "content_filter" not in detail:
+                    errs = [f"HTTP {e.code}"]; stats.log.append({"tag": tag, "error": errs[0]})
+                    continue
                 stats.content_filtered += 1
-                if not llm_available("qwen"):
-                    # 没有千问 key：同样内容重试没有意义，交给调用方拆批 / 规则降级
-                    stats.tasks -= 1
-                    raise ContentFiltered(tag)
-                # Mercury 的内容过滤会误伤文学文本（如师生暧昧情节）→ 这一批改由千问规划
-                stats.warnings.append(f"[{tag}] {provider} 内容过滤拒答，本批改用 qwen")
-                provider, model = "qwen", PROVIDERS["qwen"]["model"]; stats.fallbacks = getattr(stats, "fallbacks", 0) + 1
-            elif attempt == 0:
-                model = PROVIDERS[provider]["fallback"]
-            continue
-        except Exception as e:  # timeout / bad json / truncation
-            errs = [f"{type(e).__name__}: {e}"[:200]]; stats.log.append({"tag": tag, "error": errs[0]})
+            fb = eng.fallback if eng is not None else None
+            if fb is not None and cur is not fb:
+                stats.warnings.append(f"[{tag}] {(cur or eng.client).label} 内容过滤拒答，本批改用 {fb.label}")
+                cur = fb; stats.fallbacks += 1
+                continue
+            stats.tasks -= 1
+            raise ContentFiltered(tag)
+        except Exception as e:  # timeout / bad json / truncation / LLMError
+            errs = [llm.redact(f"{type(e).__name__}: {e}")[:200]]; stats.log.append({"tag": tag, "error": errs[0]})
             continue
         obj = normalize(obj)
         v = jsonschema.Draft202012Validator(schema)
         errs = [f"{'/'.join(map(str, e.absolute_path))}: {e.message}"[:200] for e in v.iter_errors(obj)]
         if not errs:
             errs = semantic(obj)
+        soft = [e for e in errs if e.startswith("组件与原文不符")]
+        if attempt == 0 and len(soft) == len(errs):
+            stats.first_pass += 1          # 首次合格率只看结构（schema + 段号完整）；组件一致性单独计分
+        if errs and len(soft) == len(errs) and (attempt >= 1 or strat.repair_rounds == 0):
+            # 只剩“组件与原文不符”：已经回灌修过一轮，不再耗调用——结构合格，不符的组件交给 guard_plan 去掉
+            stats.passed += 1; stats.warnings.append(f"[{tag}] 仍有 {len(soft)} 个组件与原文不符，交给护栏去掉")
+            return obj, []
         if not errs:
-            stats.passed += 1; stats.first_pass += (attempt == 0)
+            stats.passed += 1
             return obj, []
         stats.log.append({"tag": tag, "invalid": errs[:3]})
     stats.failed += 1
-    stats.warnings.append(f"[{tag}] 两次均不合格，使用规则修复：{errs[:5]}")
+    stats.warnings.append(f"[{tag}] {1 + max(0, strat.repair_rounds)} 次均不合格，使用规则修复：{errs[:5]}")
     return obj, errs
 
 
@@ -342,13 +348,13 @@ DETAIL_SYS = """你是小说的“分镜导演”。你只输出 JSON，绝不�
 utterances：仅当一段里叙述和引号台词混在一起、或一段里有多人轮流说话时（整段就是一个人的台词时不要列），列出其中的台词片段 {{"i":段号,"q":"逐字子串(含引号可不含)","sp":"人物id"}}，每段最多 6 条，片段 4–60 字。
 visuals：在情节节点插入组件 {{"at":段号,"pos":"before|after","type":"组件名","params":{{…}}}}。
 - params 必须严格符合上面的类型：数组参数（labels/cards/entries/props）必须是 JSON 数组；sound.count 为 3–12 的整数。
-- 每个场景 1–3 个，必须和该处情节直接对应（文中真的出现门铃才用 doorbell，出现车才用 car_night…）；不要相邻两段都放；caption ≤12 字，用中文短语。
+- 每个场景 1–{vmax} 个，必须和该处情节直接对应（文中真的出现门铃才用 doorbell，出现车才用 car_night…）；不要相邻两段都放；caption ≤12 字，用中文短语。
 - 场景开头交代空间优先用 interior/window；同一个房间的 interior 全文只用一次，同一物件的 object 最多两次；回忆场景用 stairs_memory；沉默/停顿用 silence。
 quotes：挑 0–2 句最有分量的话做大字摘句 {{"at":段号,"text":"原文逐字子串，8–40字","w":分量1-5}}，优先选点题、意象鲜明、能脱离上下文成立的句子（w=5），普通台词 w≤2。
 只输出 JSON：{{"paras":[…],"utterances":[…],"visuals":[…],"quotes":[…]}}"""
 
 
-def detail_semantic(segs_by_i, idxs, char_ids):
+def detail_semantic(segs_by_i, idxs, char_ids, segs_list=None, scenes=None):
     def f(o):
         e = []
         got = [p[0] for p in o["paras"]]
@@ -359,6 +365,11 @@ def detail_semantic(segs_by_i, idxs, char_ids):
         if extra:
             e.append(f"paras 出现了不属于本批的段号 {extra[:10]}")
         # 人物表外的 id（整本书里的次要人物）不重试：assemble 会把它们当作"无"处理
+        # 统一护栏：具象组件必须在原文里有对应（door 附近要有“门”…），否则回灌修复；修不好由 guard_plan 去掉
+        if segs_list is not None:
+            vis = [v for v in o.get("visuals", []) if isinstance(v, dict) and v.get("at") in idxs]
+            for v, why in quality.visual_issues(vis, segs_list, scenes)[:6]:
+                e.append("组件与原文不符：" + why + "（换成合适的组件或删掉）")
         return e[:20]
     return f
 
@@ -425,13 +436,17 @@ BOOK_MIN_SEGS = 200
 PSEUDO_CHAPTER = 120   # 没有章节标题的超长文本：每 ~120 段当一章来规划
 
 
-def is_book(seg):
+def is_book(seg, strat=None):
+    """整本书 / 需要切块的长文本。弱模型（上下文小）阈值更低：上下文切块。"""
     segs = seg["segments"]
     chars = sum(len(x["text"]) for x in segs)
-    return (len(seg.get("chapters") or []) >= 2 and chars >= BOOK_MIN_CHARS) or len(segs) > BOOK_MIN_SEGS
+    limit = strat.book_segs if strat else BOOK_MIN_SEGS
+    big = strat is not None and chars > strat.outline_budget * 3 and len(segs) > 2 * strat.pseudo_chapter
+    return (len(seg.get("chapters") or []) >= 2 and chars >= BOOK_MIN_CHARS) or len(segs) > limit or big
 
 
-def book_chapters(seg):
+def book_chapters(seg, pseudo=PSEUDO_CHAPTER):
+    PSEUDO_CHAPTER = pseudo
     chs = [dict(c) for c in (seg.get("chapters") or [])] or [{"start": 0, "end": len(seg["segments"]) - 1, "title": ""}]
     out = []
     for c in chs:   # 过长的章（或整篇无章名）再按 ~120 段切成"部分"
@@ -449,11 +464,53 @@ def book_chapters(seg):
     return out
 
 
-def _prep(model_spec, effort):
-    provider, model = resolve_model(model_spec)
-    if effort and provider == "mercury":
-        PROVIDERS["mercury"]["extra"]["reasoning_effort"] = effort
-    return provider, model
+def _prep(model_spec, effort, engine=None):
+    return engine or engine_for(model_spec, effort)
+
+
+FEW_SHOT_DETAIL = [
+    ("""【示例场景 雨夜｜夜｜门口｜段 0–2】（示例人物：aqing=阿青；laozhou=老周）
+[0] 雨下了一整夜。
+[1] “你怎么来了？”阿青拉开门，愣住了。
+[2] 老周没说话，只是把伞收起来，耳根有些发红。""",
+     '{"paras":[[0,"",[],0.2,0.3,0,""],[1,"aqing",["aqing","laozhou"],0.3,0.5,0,""],[2,"",["aqing","laozhou"],0.4,0.5,0.6,"laozhou"]],'
+     '"utterances":[{"i":1,"q":"你怎么来了？","sp":"aqing"}],"visuals":[{"at":1,"pos":"before","type":"door","params":{"action":"open","caption":"雨夜开门"}}],"quotes":[]}'),
+    ("""【示例场景 课堂｜上午｜教室｜段 5–6】（示例人物：lin=林老师；xiao=小许）
+[5] 林老师把成绩单拍在讲台上：“这次谁考了满分？”
+[6] 教室里一片安静。""",
+     '{"paras":[[5,"lin",["lin","xiao"],0.2,0.6,0,""],[6,"",["lin","xiao"],0.2,0.7,0,""]],"utterances":[],'
+     '"visuals":[{"at":6,"pos":"after","type":"silence","params":{"length":"short"}}],"quotes":[]}'),
+]
+FEW_SHOT_OUTLINE = ("""共 6 段（编号 0–5）：
+[0] 那年冬天，我回到了阔别二十年的故乡。
+[1] 母亲早已迎着出来了。
+[2] “你休息一两天，去拜望亲戚本家一回，我们便可以走了。”母亲说。
+[3] 第二日清早，我到了镇口的小店。
+[4] 掌柜正在柜台后面算账。
+[5] 他抬头看了我一眼，又低下头去。""",
+    '{"meta":{"title":"回乡","author":"","work":"","subtitle":"我 · 母亲","hero_motif":"door","hero_segments":[]},'
+    '"characters":[{"id":"wo","name":"我","aliases":[],"color":"#2b4a6f"},{"id":"mu","name":"母亲","aliases":[],"color":"#6b3e26"},{"id":"zg","name":"掌柜","aliases":[],"color":"#3d5a3a"}],'
+    '"focal_pair":["wo","mu"],"scenes":[{"start":0,"end":2,"name":"到家","time":"冬天","place":"老屋","tone":"day"},'
+    '{"start":3,"end":5,"name":"小店","time":"清早","place":"镇口小店","tone":"day"}]}')
+
+
+def few_shot_block(kind, k):
+    if k <= 0:
+        return ""
+    if kind == "outline":
+        return "\n\n下面是一个格式示例（内容与本文无关，只看格式）：\n输入：\n" + FEW_SHOT_OUTLINE[0] + "\n输出：\n" + FEW_SHOT_OUTLINE[1]
+    ex = FEW_SHOT_DETAIL[:k]
+    return "\n\n格式示例（示例人物与本文无关，只看格式；数值请按本文情节给）：\n" + "\n\n".join(
+        f"输入：\n{a}\n输出：\n{b}" for a, b in ex)
+
+
+STRICT_DETAIL = """
+
+【严格要求】
+1. paras 必须恰好 {n} 行，段号依次为：{idx}。每行 7 个元素，顺序固定；数值是 0–1 之间的小数。
+2. 人物 id 只能取：{ids}（不在场或不是台词就填 "" 或 []）。
+3. visuals 的 type 只能取：{types}；拿不准就不放组件（visuals 可以是空数组）。每个场景最多 {vmax} 个。
+4. quotes 的 text 必须从原文逐字复制；拿不准就留空数组。"""
 
 
 def _detail_runner(segs, o, provider, model, stats, progress):
@@ -461,7 +518,9 @@ def _detail_runner(segs, o, provider, model, stats, progress):
     chars_txt = "；".join(f"{c['id']}={c['name']}" + (f"(又称{'/'.join(c.get('aliases', []))})" if c.get("aliases") else "")
                          for c in o["characters"])
     focal = " 与 ".join(next(c["name"] for c in o["characters"] if c["id"] == x) for x in o["focal_pair"]) or "无"
-    sysmsg = DETAIL_SYS.format(chars=chars_txt, focal=focal, catalog=prompt_catalog())
+    strat = stats.engine.strategy if getattr(stats, "engine", None) else tiers.strategy_for("A")
+    sysmsg = DETAIL_SYS.format(chars=chars_txt, focal=focal, catalog=prompt_catalog(), vmax=strat.visuals_per_scene)
+    sysmsg += few_shot_block("detail", strat.few_shot)
     segs_by_i = {s["i"]: s["text"] for s in segs}
 
     def run(b, depth=0, quiet=False):
@@ -470,13 +529,18 @@ def _detail_runner(segs, o, provider, model, stats, progress):
         body = "\n".join(
             f"【场景 {s['name']}｜{s.get('time', '')}｜{s.get('place', '')}｜段 {s['start']}–{s['end']}】\n" +
             "\n".join(f"[{i}] {segs[i]['text']}" for i in range(s['start'], s['end'] + 1)) for s in b)
+        if not strat.enum_in_prompt:
+            body += f"\n\n本批段号 {idxs[0]}–{idxs[-1]}，共 {len(idxs)} 段：paras 必须逐段输出、一段不漏。"
+        else:
+            body += STRICT_DETAIL.format(n=len(idxs), idx=(f"{idxs[0]}–{idxs[-1]} 连续" if idxs == list(range(idxs[0], idxs[-1] + 1)) else str(idxs)),
+                                         ids="、".join(char_ids), types="|".join(COMPONENTS), vmax=strat.visuals_per_scene)
         m = [{"role": "system", "content": sysmsg}, {"role": "user", "content": body}]
-        mt = min(8000, 600 + 90 * len(idxs))
+        mt = min(strat.detail_max_tokens, 800 + 160 * len(idxs))
         tag = f"detail {idxs[0]}-{idxs[-1]}"
         try:
-            r, e = call_validated(m, detail_schema(), detail_semantic(segs_by_i, idxs, char_ids), model, mt, stats, tag, provider)
+            r, e = call_validated(m, detail_schema(), detail_semantic(segs_by_i, idxs, char_ids, segs, o.get("scenes")), None, mt, stats, tag)
             hard = e and (r is None or any(k in x for x in e for k in ("截断", "JSONDecodeError", "HTTP", "缺少段号")))
-            if hard and depth < 1 and len(idxs) > 8:
+            if hard and depth < 1 and len(idxs) > max(4, strat.batch_paras // 3):
                 # 截断 / 坏 JSON / 漏段：两次都失败时对半拆开再试一次，比整批规则修复保留更多分镜
                 mid = idxs[len(idxs) // 2]
                 stats.warnings.append(f"[{tag}] 两次不合格，拆成两半重试")
@@ -502,17 +566,29 @@ def _detail_runner(segs, o, provider, model, stats, progress):
     return run
 
 
-def plan(seg, progress=lambda *a: None, stats=None, model_spec=None, effort=None):
-    if is_book(seg):
-        return plan_book(seg, progress, stats, model_spec, effort)
-    provider, model = _prep(model_spec, effort)
-    stats = stats or Stats(provider, model)
+def _prov(eng):
+    """报告里的 provider 名：平台模型沿用 mercury / qwen（书架“重新规划”靠它），用户模型记为 user。"""
+    if eng.source == "user":
+        return "user"
+    return eng.client.dialect if eng.client.dialect in PROVIDERS else eng.client.cfg.kind
+
+
+def _engine_label(eng):
+    return f"{eng.label} · {eng.tier} 档" + (f" · 推理 {eng.client.reason_level}" if eng.client.reason_level not in ("auto",) else "")
+
+
+def plan(seg, progress=lambda *a: None, stats=None, model_spec=None, effort=None, engine=None):
+    eng = _prep(model_spec, effort, engine)
+    strat = eng.strategy
+    if is_book(seg, strat):
+        return plan_book(seg, progress, stats, model_spec, effort, engine=eng)
+    stats = stats or Stats(_prov(eng), eng.client.cfg.model, eng)
     segs = seg["segments"]; n = len(segs)
-    progress("outline", f"规划场景与人物（{n} 段，{provider}:{model}" + (f"/{PROVIDERS[provider]['extra'].get('reasoning_effort')}" if provider == "mercury" else "") + "）")
-    msgs = [{"role": "system", "content": OUTLINE_SYS},
-            {"role": "user", "content": f"共 {n} 段（编号 0–{n - 1}）：\n" + numbered(segs)}]
+    progress("outline", f"规划场景与人物（{n} 段，{_engine_label(eng)}）")
+    msgs = [{"role": "system", "content": OUTLINE_SYS + few_shot_block("outline", min(1, strat.few_shot))},
+            {"role": "user", "content": f"共 {n} 段（编号 0–{n - 1}）：\n" + numbered(segs, strat.outline_budget)}]
     try:
-        o, errs = call_validated(msgs, OUTLINE_SCHEMA, outline_semantic(n, True), model, 3000, stats, "outline", provider)
+        o, errs = call_validated(msgs, OUTLINE_SCHEMA, outline_semantic(n, True), None, 3000, stats, "outline")
     except ContentFiltered:
         stats.warnings.append("[outline] 内容过滤拒答，场景改用规则切分"); o = None
     if not o or not o.get("scenes"):
@@ -520,14 +596,16 @@ def plan(seg, progress=lambda *a: None, stats=None, model_spec=None, effort=None
     o = repair_outline(o, segs)
     if not o["characters"]:
         o["characters"] = [{"id": "narrator", "name": "叙述者", "color": "#2b4a6f"}]
-    bs = batches(o["scenes"], segs)
+    bs = batches(o["scenes"], segs, strat.batch_paras, strat.batch_chars)
     progress("detail", f"逐段分镜：{len(bs)} 批并行")
-    run = _detail_runner(segs, o, provider, model, stats, progress)
+    run = _detail_runner(segs, o, None, None, stats, progress)
     results = []
-    with cf.ThreadPoolExecutor(max_workers=4) as ex:
+    with cf.ThreadPoolExecutor(max_workers=max(1, min(4, strat.concurrency))) as ex:
         for res in ex.map(run, bs):
             results += res
-    return assemble(o, results, segs, stats), stats
+    out = assemble(o, results, segs, stats)
+    out["_guard"] = quality.guard_plan(out, segs, stats, strat)
+    return out, stats
 
 
 # ------------------------------------------------------------------ whole book
@@ -630,23 +708,22 @@ def cast_sample(segs, chapters, budget=18000):
     return "\n\n".join(parts)
 
 
-def plan_book(seg, progress=lambda *a: None, stats=None, model_spec=None, effort=None):
-    provider, model = _prep(model_spec, effort)
-    stats = stats or Stats(provider, model)
+def plan_book(seg, progress=lambda *a: None, stats=None, model_spec=None, effort=None, engine=None):
+    eng = _prep(model_spec, effort, engine); strat = eng.strategy
+    stats = stats or Stats(_prov(eng), eng.client.cfg.model, eng)
     segs = seg["segments"]; n = len(segs)
-    chs = book_chapters(seg); N = len(chs)
-    conc = int(os.environ.get("VR_LLM_CONCURRENCY", 3))
-    eff = f"/{PROVIDERS[provider]['extra'].get('reasoning_effort')}" if provider == "mercury" else ""
-    progress("outline", f"整本书模式：{N} 章 · {n} 段 · {provider}:{model}{eff} · 并发 {conc}")
+    chs = book_chapters(seg, strat.pseudo_chapter); N = len(chs)
+    conc = min(eng.client.cfg.concurrency, int(os.environ.get("VR_LLM_CONCURRENCY", 3)))
+    progress("outline", f"整本书模式：{N} 章 · {n} 段 · {_engine_label(eng)} · 并发 {conc}")
     # 0. cast
     msgs = [{"role": "system", "content": CAST_SYS}, {"role": "user", "content": cast_sample(segs, chs)}]
     try:
-        cast, errs = call_validated(msgs, CAST_SCHEMA, outline_semantic_cast, model, 2500, stats, "cast", provider)
+        cast, errs = call_validated(msgs, CAST_SCHEMA, outline_semantic_cast, None, 2500, stats, "cast")
     except ContentFiltered:
         stats.warnings.append("[cast] 内容过滤拒答，改用第一章节选重试")
         try:
             msgs[1]["content"] = cast_sample(segs, chs[:1], 6000)
-            cast, errs = call_validated(msgs, CAST_SCHEMA, outline_semantic_cast, model, 2500, stats, "cast-retry", provider)
+            cast, errs = call_validated(msgs, CAST_SCHEMA, outline_semantic_cast, None, 2500, stats, "cast-retry")
         except ContentFiltered:
             cast = None
     o = repair_outline(dict(cast or {}, scenes=[{"start": 0, "end": n - 1, "name": "全书", "tone": "day"}]), segs)
@@ -657,7 +734,7 @@ def plan_book(seg, progress=lambda *a: None, stats=None, model_spec=None, effort
     chars_txt = "；".join(f"{c['id']}={c['name']}" + (f"(又称{'/'.join(c.get('aliases', []))})" if c.get("aliases") else "")
                          for c in o["characters"])
     progress("cast", f"人物 {len(o['characters'])} 个：" + "、".join(c["name"] for c in o["characters"]))
-    run = _detail_runner(segs, o, provider, model, stats, lambda *a: None)
+    run = _detail_runner(segs, o, None, None, stats, lambda *a: None)
     done = [0]; lock = threading.Lock()
 
     def do_chapter(k):
@@ -666,9 +743,9 @@ def plan_book(seg, progress=lambda *a: None, stats=None, model_spec=None, effort
         try:
             sub = segs[a:b + 1]
             m = [{"role": "system", "content": CH_OUTLINE_SYS.format(chars=chars_txt, a=a, b=b)},
-                 {"role": "user", "content": f"本章共 {b - a + 1} 段（编号 {a}–{b}）：\n" + numbered(sub)}]
+                 {"role": "user", "content": f"本章共 {b - a + 1} 段（编号 {a}–{b}）：\n" + numbered(sub, strat.outline_budget)}]
             try:
-                co, e = call_validated(m, CH_OUTLINE_SCHEMA, chapter_outline_semantic(a, b), model, 2500, stats, f"outline ch{k + 1}", provider)
+                co, e = call_validated(m, CH_OUTLINE_SCHEMA, chapter_outline_semantic(a, b), None, 2500, stats, f"outline ch{k + 1}")
                 if e: degraded.append("场景已规则修复")
             except ContentFiltered:
                 co = None; degraded.append("场景规则切分（内容过滤）")
@@ -676,7 +753,7 @@ def plan_book(seg, progress=lambda *a: None, stats=None, model_spec=None, effort
             if all(x.get("_rule") for x in scenes):
                 stats.rule_scenes_chapters += 1
             results = []
-            for bt in batches(scenes, segs):
+            for bt in batches(scenes, segs, strat.batch_paras, strat.batch_chars):
                 results += run(bt)
             nf = sum(len(ix) for ix, r, e in results if r is None)
             if nf: degraded.append(f"{nf} 段规则分镜")
@@ -698,7 +775,9 @@ def plan_book(seg, progress=lambda *a: None, stats=None, model_spec=None, effort
         x.pop("_rule", None)
     o["scenes"] = all_scenes
     o["chapters"] = [{"start": c["start"], "end": c["end"], "title": c["title"]} for c in chs]
-    return assemble(o, all_results, segs, stats), stats
+    out = assemble(o, all_results, segs, stats)
+    out["_guard"] = quality.guard_plan(out, segs, stats, strat)
+    return out, stats
 
 
 def outline_semantic_cast(o):
@@ -808,8 +887,7 @@ def assemble(o, results, segs, stats):
 def llm_available(model_spec=None):
     """是否能调用 LLM：环境变量里有该 provider 的 key，或运行在凭证自动注入的网关环境（VIBEREADING_GATEWAY=1 或列出 provider）。"""
     provider, _ = resolve_model(model_spec)
-    gw = os.environ.get("VIBEREADING_GATEWAY", "")   # "1" = 所有 provider 都由网关注入凭证；也可写 "mercury" / "mercury,qwen"
-    return bool(os.environ.get(PROVIDERS[provider]["key_env"]) or gw == "1" or provider in [x.strip() for x in gw.split(",")])
+    return llm.platform_available(provider)   # 环境变量有 key，或 VIBEREADING_GATEWAY=1 / 列出该 provider（网关注入凭证）
 
 
 def validate_plan(plan, seg):

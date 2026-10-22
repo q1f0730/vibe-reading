@@ -122,6 +122,34 @@ const da = $('#delacct');
 if (da) da.onsubmit = async e => { e.preventDefault(); if (!confirm('永久删除账号和书架上的全部书？')) return;
   try { await api('DELETE', '/api/me', {password: $('#delpw').value}); location.href = '/'; } catch (x) { $('#delerr').textContent = x.message; } };
 
+// ---------------- model settings ----------------
+const mf = $('#mform');
+if (mf) {
+  const form = () => { const d = Object.fromEntries(new FormData(mf)); d.stream = $('#m_stream').checked; if (!d.api_key) delete d.api_key; return d; };
+  const merr = $('#merr'), mres = $('#mres');
+  $('#mtest').onclick = async () => {
+    merr.textContent = ''; mres.textContent = '测试中…'; $('#mtest').disabled = true;
+    try { const r = await api('POST', '/api/model/test', form());
+      mres.textContent = r.ok ? `连通 ✓ · ${r.latency}s · 回复「${r.reply || ''}」${r.reasoning ? ' · 推理模型' : ''}` : '';
+      if (!r.ok) merr.textContent = '测试失败：' + (r.error || '没有回复'); }
+    catch (x) { mres.textContent = ''; merr.textContent = x.message; }
+    $('#mtest').disabled = false;
+  };
+  mf.onsubmit = async e => {
+    e.preventDefault(); merr.textContent = ''; $('#msave').disabled = true; mres.textContent = '保存中…';
+    try { await api('POST', '/api/model', form()); location.reload(); }
+    catch (x) { merr.textContent = x.message; mres.textContent = ''; $('#msave').disabled = false; }
+  };
+  const del = $('#mdel');
+  if (del) del.onclick = async () => { if (!confirm('删除你的模型配置（含加密保存的 key），改回平台默认？')) return;
+    try { await api('DELETE', '/api/model', {}); location.reload(); } catch (x) { merr.textContent = x.message; } };
+  const ms = $('#mstatus');
+  if (ms && ms.dataset.status === 'probing') {
+    const poll = async () => { try { const j = await api('GET', '/api/model'); if (j.model && j.model.status !== 'probing') return location.reload(); } catch (x) {} setTimeout(poll, 2500); };
+    setTimeout(poll, 2500);
+  }
+}
+
 // ---------------- darkroom progress ----------------
 const dev = $('#dev');
 if (dev) {

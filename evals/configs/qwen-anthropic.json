@@ -1,0 +1,2 @@
+{"name": "qwen-anthropic", "label": "千问 qwen3.8-flash（Anthropic 原生接口，默认开推理）", "kind": "anthropic", "base_url": "https://maas.qianwenaiapi.com/apps/anthropic",
+ "model": "qwen3.8-flash", "api_key_env": "DASHSCOPE_API_KEY", "reasoning": "auto", "concurrency": 3, "timeout": 115, "max_total_seconds": 120}

@@ -1,0 +1,2 @@
+{"name": "mercury", "label": "Mercury mercury-3（平台默认）", "kind": "openai", "base_url": "https://api.inceptionlabs.ai/v1",
+ "model": "mercury-3", "api_key_env": "INCEPTION_API_KEY", "reasoning": "instant", "concurrency": 3, "timeout": 90}

@@ -32,7 +32,7 @@ def layout(title, body, user=None, current="", dark=False, desc="把任意小说
     def cur(k): return ' aria-current="page"' if current == k else ""
     if user:
         nav = (f'<a href="/#sample"{cur("sample")} class="hide-s">示例</a><a href="/shelf"{cur("shelf")}>书架</a>'
-               f'<a href="/#upload" class="hide-s">新建</a><span class="who" title="{esc(user["username"])}">@{esc(user["username"])}</span>'
+               f'<a href="/#upload" class="hide-s">新建</a><a href="/settings"{cur("settings")}>模型</a><span class="who" title="{esc(user["username"])}">@{esc(user["username"])}</span>'
                f'<button type="button" data-logout>退出</button>')
     else:
         nav = (f'<a href="/sample/kongyiji"{cur("sample")}>示例</a><a href="/login"{cur("login")}>登录</a>'
@@ -199,9 +199,21 @@ def book_card(b, i, job_id=None, llm_any=False):
  <div class="by">{esc(b['author'] or '')}</div>
  <div class="nums"><div><b>{fmt_num(b['char_count'])}</b><span>字</span></div><div><b>{b['segments'] or '—'}</b><span>段</span></div><div><b>{vtxt}</b><span>校验一致</span></div></div>
  <div class="meta"><span>{esc(model)} · {secs}s</span><span class="vis {esc(b['visibility'])}">{vis}</span></div>
+ {_quality_line(b)}
  {err}
  <div class="acts">{open_a}<button type="button" data-act="rebuild" {'aria-disabled="true"' if busy else ''}>重新生成</button><button type="button" data-act="share">分享</button><button type="button" class="del" data-act="delete" {'aria-disabled="true"' if busy else ''}>删除</button></div>
 </article>"""
+
+
+def _quality_line(b):
+    try:
+        q = json.loads(b["quality_json"]) if b["quality_json"] else None
+    except Exception:
+        q = None
+    if not q:
+        return ""
+    return (f'<div class="qline"><a href="/b/{esc(b["id"])}/quality">质量 {esc(q.get("overall"))} · {esc(q.get("tier") or "—")} 档 · '
+            f'降级 {round(100 * (q.get("degraded_paragraph_ratio") or 0), 1)}% · 下限{"✓" if q.get("floor_ok") else "✕"}</a></div>')
 
 
 def shelf(user, books, jobs_by_book, llm_any):
@@ -247,3 +259,132 @@ def job_page(user, job, book):
 def message(title, big, text, user=None, link=("/", "回首页"), code=""):
     return layout(title, f"""<section class="plain wrap"><div class="kicker"><b>{esc(code)}</b> {esc(title)}</div>
 <h1>{esc(big)}<small>{esc(code)}</small></h1><p>{text}</p><a class="btn" href="{esc(link[0])}">{esc(link[1])} <span class="arr">→</span></a></section>""", user)
+
+
+# ------------------------------------------------------------------ model settings
+KIND_LABEL = {"openai": "OpenAI 兼容（含 DeepSeek / 千问 / Mercury / OpenRouter / Gemini 兼容端点…）", "anthropic": "Anthropic 原生（/v1/messages）",
+              "gemini": "Gemini 原生（generateContent）"}
+PROBE_LABEL = [("ping", "连通 / 延迟"), ("json_mode", "JSON 模式"), ("json_schema", "结构化输出"), ("json_prompt", "提示词 JSON"),
+               ("tools", "工具调用"), ("max_output", "最大输出"), ("context", "上下文"), ("zh_long", "中文长文本"), ("filter", "内容过滤倾向")]
+TIER_TEXT = {"A": "强：大批次、少约束、允许多镜头动画与（可选）代码模式",
+             "B": "中：中等批次、schema/enum 约束、两轮修复",
+             "C": "弱：小批次、最严约束 + few-shot、规则兜底最多、动画只用两镜头"}
+
+
+def _probe_cell(name, p):
+    if not p:
+        return "—"
+    if p.get("filtered"):
+        return "被过滤"
+    if p.get("error"):
+        return "✕ " + esc(p["error"][:60])
+    extra = {"ping": lambda: f"{p.get('latency')}s" + (" · 推理模型" if p.get("reasoning") else ""),
+             "max_output": lambda: f"≥{p.get('max_output_ok')} token",
+             "context": lambda: f"≥{p.get('context_ok')} token" if p.get("ok") else "< 8k",
+             "zh_long": lambda: f"{p.get('score')} 分",
+             "filter": lambda: f"误伤 {p.get('blocked')}/{p.get('of')}"}.get(name)
+    return ("✓" if p.get("ok") else "✕") + (" " + esc(extra()) if extra else "")
+
+
+def settings(user, v, crypto_ok, platform):
+    c = (v or {}).get("config") or {}
+    prof = (v or {}).get("profile") or {}
+    def sel(name, val, opts):
+        return f'<select class="inp" id="m_{name}" name="{name}">' + "".join(
+            f'<option value="{esc(k)}"{" selected" if str(val) == str(k) else ""}>{esc(t)}</option>' for k, t in opts) + "</select>"
+    status = ""
+    if v:
+        st = {"probing": "探针运行中（约 10–60 秒）…", "ready": f"已通过探针 · <b>{esc(v['tier'])} 档</b> · {esc(TIER_TEXT.get(v['tier'], ''))}",
+              "failed": "探针未通过：" + esc(v.get("error") or "")}[v["status"]]
+        rows = "".join(f'<tr><th>{esc(lab)}</th><td>{_probe_cell(k, (prof.get("probes") or {}).get(k))}</td></tr>' for k, lab in PROBE_LABEL) if prof else ""
+        reasons = "".join(f"<li>{esc(x)}</li>" for x in prof.get("tier_reasons") or [])
+        adapt = "".join(f"<li>{esc(x)}</li>" for x in prof.get("adaptations") or [])
+        status = f"""<div class="mstatus" id="mstatus" data-status="{esc(v['status'])}"><div class="kicker"><b>{esc(v['tier'] or '…')}</b> 能力档案 / Profile</div>
+<p>{status}</p>{'<table class="qtable">' + rows + '</table>' if rows else ''}
+{('<p class="hint">分档依据：</p><ul class="hint">' + reasons + '</ul>') if reasons else ''}{('<p class="hint">自动适配：</p><ul class="hint">' + adapt + '</ul>') if adapt else ''}</div>"""
+    plat = "、".join(k for k, ok in platform.items() if ok) or "无"
+    warn = "" if crypto_ok else '<div class="notice"><b>服务器没有配置加密密钥（VR_SECRET_KEY）。</b>为了不明文保存 key，暂时不能保存自己的模型；「测试」仍可用。</div>'
+    return f"""
+<section class="plain wrap settings">
+ <div class="kicker"><b>@{esc(user['username'])}</b> 模型设置 / Your model</div>
+ <h1>用你自己的模型<small>BYO model</small></h1>
+ <p>填一个你自己的模型（OpenAI 兼容 / Anthropic / Gemini）。保存后会自动跑一组小探测（约 11 次很短的调用），按能力分成 A / B / C 三档，
+ 生成时按档位调整批次、约束和兜底：<b>不管接什么模型，原文逐字、校验与兜底都一样</b>，弱模型只是更多交给规则。
+ 没有配置时用平台默认模型（当前可用：{esc(plat)}）。</p>
+ {warn}
+ <form id="mform" class="mform" autocomplete="off" novalidate>
+  <div class="field"><label for="m_kind">接口类型</label>{sel('kind', c.get('kind', 'openai'), list(KIND_LABEL.items()))}</div>
+  <div class="field"><label for="m_base_url">Base URL</label><input class="inp" id="m_base_url" name="base_url" maxlength="300" required value="{esc(c.get('base_url', ''))}" placeholder="https://api.deepseek.com/v1">
+   <div class="hint">OpenAI 兼容填到 /v1 为止；Anthropic 如 https://api.anthropic.com；Gemini 如 https://generativelanguage.googleapis.com/v1beta。</div></div>
+  <div class="field row2"><div><label for="m_model">模型名</label><input class="inp" id="m_model" name="model" maxlength="120" required value="{esc(c.get('model', ''))}" placeholder="deepseek-chat"></div>
+   <div><label for="m_label">显示名 <span style="color:var(--ink3)">· 可选</span></label><input class="inp" id="m_label" name="label" maxlength="60" value="{esc(c.get('label', ''))}"></div></div>
+  <div class="field"><label for="m_api_key">API key</label><input class="inp" id="m_api_key" name="api_key" type="password" autocomplete="new-password" maxlength="4000"
+   placeholder="{('已保存 ' + esc(v['key']) + ' · 留空不改') if v and v.get('has_key') else 'sk-…'}">
+   <div class="hint">只在服务器上用 AES-256-GCM 加密保存；页面、日志、报错里都不会出现明文。</div></div>
+  <div class="field row2"><div><label for="m_reasoning">推理强度</label>{sel('reasoning', c.get('reasoning', 'auto'), [("auto", "自动（推荐）"), ("off", "关闭"), ("minimal", "最低"), ("low", "低"), ("medium", "中"), ("high", "高"), ("instant", "instant（Mercury）")])}
+   <div class="hint">推理吃光输出上限时会自动降档 / 关闭。</div></div>
+   <div><label for="m_concurrency">并发上限</label><input class="inp" id="m_concurrency" name="concurrency" type="number" min="1" max="16" value="{esc(c.get('concurrency', 3))}"></div></div>
+  <div class="field row2"><div><label for="m_timeout">单次超时（秒）</label><input class="inp" id="m_timeout" name="timeout" type="number" min="5" max="600" value="{esc(c.get('timeout', 90))}"></div>
+   <div><label for="m_max_total_seconds">网关总时长上限（秒，0 不限）</label><input class="inp" id="m_max_total_seconds" name="max_total_seconds" type="number" min="0" max="900" value="{esc(c.get('max_total_seconds', 0))}"></div></div>
+  <div class="opts"><label><input type="checkbox" id="m_stream" name="stream" {'checked' if c.get('stream') else ''}> 流式输出（长输出 / 有网关时长限制时更稳）</label></div>
+  <div class="go-row"><button class="btn ghost" type="button" id="mtest">测试</button><button class="btn" type="submit" id="msave" {'' if crypto_ok else 'disabled'}>保存并探测 <span class="arr">→</span></button>
+   {'<button class="btn ghost" type="button" id="mdel">删除，改回平台默认</button>' if v else ''}</div>
+  <div class="err" id="merr" role="alert"></div><div class="hint" id="mres" role="status"></div>
+ </form>
+ {status}
+</section>"""
+
+
+# ------------------------------------------------------------------ quality report (author only)
+SCORE_LABEL = [("schema", "schema 合格率"), ("schema_first_pass", "首次合格率"), ("verbatim", "原文逐字一致"), ("coverage", "模型分镜覆盖（100−降级）"),
+               ("scenes", "场景分布"), ("visual_consistency", "组件与原文一致"), ("diversity", "组件/原语多样性"), ("hero", "关键场景动画")]
+
+
+def _fmt(x, suf=""):
+    return "—" if x is None else f"{x}{suf}"
+
+
+def quality_page(user, b, q):
+    if not q:
+        return f'<section class="plain wrap"><div class="kicker"><b>QA</b> 质量报告</div><h1>还没有质量报告<small>No report</small></h1><p>这本书是旧版本生成的，重新生成一次就会附上。</p><a class="btn" href="/shelf">回书架 <span class="arr">→</span></a></section>'
+    sc = q.get("scores") or {}
+    rows = "".join(f"<tr><th>{esc(lab)}</th><td>{_fmt(sc.get(k))}</td></tr>" for k, lab in SCORE_LABEL)
+    fl = q.get("floor") or {}
+    FL = {"verbatim_100": "原文 100% 逐字一致", "no_missing_text": "没有漏掉任何原文段", "plan_complete": "分镜完整（每段都有、场景首尾相接）",
+          "visuals_consistent_after_guard": "页面上的组件都与原文一致", "heroes_render_ok": "关键场景动画全部通过实测或已回退", "browser_verify": "浏览器校验（外链 / JS 报错 / 溢出）"}
+    frows = "".join(f"<tr><th>{esc(FL.get(k, k))}</th><td>{'✓' if v else ('✕' if v is False else '—')}</td></tr>" for k, v in fl.items())
+    sd = q.get("scene_distribution") or {}; dv = q.get("diversity") or {}; hs = q.get("hero") or {}; cost = q.get("cost") or {}; g = q.get("guard") or {}
+    facts = [("模型", q.get("model_label") or q.get("model")), ("档位", q.get("tier")), ("来源", {"user": "你自己的模型", "platform": "平台默认", "eval": "评测"}.get(q.get("source"), q.get("source"))),
+             ("降级段落", f"{q.get('rule_paragraphs', 0)} 段（{round(100 * (q.get('degraded_paragraph_ratio') or 0), 1)}%）"),
+             ("场景", f"{sd.get('scenes')} 个 · 每场景 {sd.get('min')}–{sd.get('max')} 段（中位 {sd.get('median')}）"),
+             ("组件", f"{dv.get('visuals')} 个 / {dv.get('visual_types')} 种；护栏去掉 {g.get('inconsistent', 0)} 个不符 + {g.get('capped', 0)} 个超量"),
+             ("关键场景动画", f"{hs.get('count', 0)} 个 · {json.dumps(hs.get('status') or {}, ensure_ascii=False)}" + (f" · 意象一致 {hs.get('imagery_consistency')}" if hs.get("imagery_consistency") is not None else "")),
+             ("调用", f"{cost.get('calls')} 次 · 输出 {cost.get('tokens_out')} token · 重试 {cost.get('retries')} · 限流退避 {cost.get('transient')} · 内容过滤 {cost.get('content_filtered')}"),
+             ("耗时", f"{q.get('seconds')} 秒")]
+    frow = "".join(f"<tr><th>{esc(k)}</th><td>{esc(v)}</td></tr>" for k, v in facts)
+    adapt = "".join(f"<li>{esc(x)}</li>" for x in q.get("adaptations") or [])
+    return f"""
+<section class="plain wrap quality">
+ <div class="kicker"><b>QA</b> 质量报告 · 只有你能看到 / Author only</div>
+ <h1>《{esc(b['title'])}》<small>总分 {_fmt(q.get('overall'))} · {esc(q.get('tier') or '—')} 档 · 下限{'守住' if q.get('floor_ok') else '未守住'}</small></h1>
+ <div class="qgrid"><div><h3>各项得分</h3><table class="qtable">{rows}</table></div>
+ <div><h3>下限检查</h3><table class="qtable">{frows}</table></div></div>
+ <h3>明细</h3><table class="qtable wide">{frow}</table>
+ {('<h3>自动适配</h3><ul class="hint">' + adapt + '</ul>') if adapt else ''}
+ <div class="acts" style="margin-top:28px"><a class="btn" href="/b/{esc(b['id'])}">打开阅读页 <span class="arr">→</span></a><a class="btn ghost" href="/shelf">回书架</a></div>
+</section>"""
+
+
+def inject_author_badge(body, b):
+    """只给书的主人：阅读页右下角一个质量徽标（链接到报告页）。读者 / 分享链接拿到的是原文件。"""
+    try:
+        q = json.loads(b["quality_json"])
+    except Exception:
+        return body
+    ok = q.get("floor_ok")
+    badge = (f'<a href="/b/{esc(b["id"])}/quality" target="_top" title="质量报告（只有你能看到）" '
+             f'style="position:fixed;right:14px;bottom:14px;z-index:2147483000;font:12px/1.2 ui-monospace,Menlo,monospace;letter-spacing:.06em;'
+             f'background:#1a1a1a;color:#faf9f7;padding:8px 11px;text-decoration:none;border-left:3px solid {"#3d7a4a" if ok else "#c41e3a"}">'
+             f'作者视图 · 质量 {esc(q.get("overall"))} · {esc(q.get("tier") or "—")} 档</a>').encode()
+    i = body.rfind(b"</body>")
+    return body[:i] + badge + body[i:] if i >= 0 else body + badge

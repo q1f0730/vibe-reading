@@ -1,0 +1,277 @@
+{
+ "name": "mercury",
+ "label": "Mercury mercury-3（平台默认）",
+ "model": "mercury-3",
+ "kind": "openai",
+ "simulate": {},
+ "force_tier": null,
+ "probe": {
+  "version": 1,
+  "at": 1792639833,
+  "kind": "openai",
+  "model": "mercury-3",
+  "base_url": "https://api.inceptionlabs.ai/v1",
+  "errors": [],
+  "ok": true,
+  "latency": 0.37,
+  "json_mode": true,
+  "json_schema": true,
+  "json_prompt": true,
+  "tools": true,
+  "max_output_ok": 32000,
+  "context_ok": 27332,
+  "zh_long": 1.0,
+  "filter_blocked": 0,
+  "reasoning": false,
+  "reasoning_tokens": 0,
+  "adaptations": [],
+  "tier": "A",
+  "tier_reasons": [
+   "全部 A 档条件满足"
+  ],
+  "code_mode_ok": true,
+  "seconds": 4.3,
+  "calls": 12,
+  "tokens_out": 3017
+ },
+ "probe_detail": {
+  "ping": {
+   "ok": true,
+   "sec": 0.74,
+   "latency": 0.37,
+   "reasoning": false,
+   "reply": "OK"
+  },
+  "json_prompt": {
+   "ok": true,
+   "sec": 0.32
+  },
+  "json_mode": {
+   "ok": true,
+   "sec": 0.42,
+   "native": true
+  },
+  "tools": {
+   "ok": true,
+   "sec": 0.29
+  },
+  "json_schema": {
+   "ok": true,
+   "sec": 0.93,
+   "via_tool": false
+  },
+  "context": {
+   "ok": true,
+   "sec": 0.51,
+   "chars": 21025,
+   "context_ok": 27332
+  },
+  "filter": {
+   "ok": true,
+   "sec": 1.1,
+   "blocked": 0,
+   "of": 2
+  },
+  "zh_long": {
+   "ok": true,
+   "sec": 1.99,
+   "score": 1.0,
+   "coverage": 1.0,
+   "verbatim_quote": true
+  },
+  "max_output": {
+   "ok": true,
+   "sec": 3.11,
+   "accepted": 32000,
+   "produced_tokens": 2350,
+   "items": 160,
+   "max_output_ok": 32000
+  }
+ },
+ "probe_seconds": 4.3,
+ "strategy": {
+  "tier": "A",
+  "batch_paras": 28,
+  "batch_chars": 4783,
+  "outline_budget": 9566,
+  "book_segs": 200,
+  "pseudo_chapter": 120,
+  "prompt": "full",
+  "few_shot": 0,
+  "structured": "schema",
+  "enum_in_prompt": false,
+  "repair_rounds": 1,
+  "detail_max_tokens": 8000,
+  "visuals_per_scene": 3,
+  "hero_per_chapter": 3,
+  "hero_max_shots": 4,
+  "code_mode": true,
+  "concurrency": 4
+ },
+ "pipeline_seconds": 68.1,
+ "quality": {
+  "version": 1,
+  "model": "mercury-3",
+  "model_label": "Mercury mercury-3（平台默认）",
+  "tier": "A",
+  "source": "eval",
+  "overall": 88.8,
+  "scores": {
+   "schema": 100.0,
+   "schema_first_pass": 83.3,
+   "verbatim": 100.0,
+   "coverage": 100.0,
+   "scenes": 100.0,
+   "visual_consistency": 82.1,
+   "diversity": 64.1,
+   "hero": 67.8
+  },
+  "floor_ok": true,
+  "floor": {
+   "verbatim_100": true,
+   "no_missing_text": true,
+   "plan_complete": true,
+   "visuals_consistent_after_guard": true,
+   "heroes_render_ok": true,
+   "browser_verify": true
+  },
+  "degraded_paragraph_ratio": 0.0,
+  "rule_paragraphs": 0,
+  "scene_distribution": {
+   "scenes": 21,
+   "min": 1,
+   "max": 15,
+   "median": 3,
+   "avg": 5.2,
+   "contiguous": true,
+   "rule_named": 0,
+   "score": 100.0
+  },
+  "diversity": {
+   "visuals": 32,
+   "visual_types": 9,
+   "component_diversity": 0.281,
+   "hero_shots": 5,
+   "hero_prims": 5,
+   "prim_diversity": 1.0
+  },
+  "hero": {
+   "count": 2,
+   "status": {
+    "ok": 1,
+    "rule": 1
+   },
+   "model_pass_rate": 0.5,
+   "degraded_rate": 0.5,
+   "imagery_consistency": 0.857
+  },
+  "guard": {
+   "visuals_total": 39,
+   "inconsistent": 7,
+   "capped": 0,
+   "caption_leaks": 0,
+   "kept": 32
+  },
+  "verbatim": {
+   "segments": 110,
+   "matched": 110,
+   "missing": [],
+   "missing_count": 0,
+   "mismatch": [],
+   "identical": true
+  },
+  "verify": {
+   "ok": true,
+   "text_identical": true,
+   "matched": 110,
+   "segments": 110,
+   "js_errors": [],
+   "external_requests": []
+  },
+  "cost": {
+   "calls": 15,
+   "plan_calls": 11,
+   "hero_calls": 4,
+   "tokens_out": 25847,
+   "tokens_in": 42653,
+   "reasoning_tokens": 0,
+   "retries": 5,
+   "transient": 0,
+   "content_filtered": 0,
+   "fallbacks": 0
+  },
+  "seconds": 68.1,
+  "adaptations": []
+ },
+ "verify": {
+  "ok": true,
+  "segments": 110,
+  "chapter_mode": false,
+  "text_identical": true,
+  "mismatches": [],
+  "matched": 110,
+  "overflow": {
+   "390": {
+    "scrollWidth": 390,
+    "innerWidth": 390,
+    "ok": true,
+    "offenders": []
+   },
+   "1280": {
+    "scrollWidth": 1280,
+    "innerWidth": 1280,
+    "ok": true,
+    "offenders": []
+   }
+  },
+  "external_requests": [],
+  "js_errors": []
+ },
+ "hero": {
+  "selected": 2,
+  "passed_first": 1,
+  "passed_fixed": 0,
+  "rule": 1,
+  "fallback": 0,
+  "filtered": 0,
+  "llm_calls": 4,
+  "tokens_out": 3999,
+  "mode": "prims",
+  "warnings": []
+ },
+ "warnings": [
+  "[detail 0-16] 仍有 2 个组件与原文不符，交给护栏去掉",
+  "[detail 17-44] 仍有 2 个组件与原文不符，交给护栏去掉",
+  "[detail 45-66] 仍有 1 个组件与原文不符，交给护栏去掉",
+  "[detail 85-109] 仍有 1 个组件与原文不符，交给护栏去掉",
+  "[detail 67-84] 仍有 1 个组件与原文不符，交给护栏去掉",
+  "护栏：去掉与原文不符的组件 interior(office)@0 所在场景原文里看不出是这个房间",
+  "护栏：去掉与原文不符的组件 timeline@1 标签 ['年关'] 不是本场景原文里的时间词",
+  "护栏：去掉与原文不符的组件 interior(office)@30 所在场景原文里看不出是这个房间",
+  "护栏：去掉与原文不符的组件 timeline@34 标签 ['新年'] 不是本场景原文里的时间词",
+  "护栏：去掉与原文不符的组件 interior(hall)@45 所在场景原文里看不出是这个房间",
+  "护栏：去掉与原文不符的组件 object(bowl)@69 附近原文没有这个物件",
+  "护栏：去掉与原文不符的组件 knock@104 附近原文没有“敲/叩/咚”"
+ ],
+ "text": "evals/texts/zhufu.txt",
+ "at": "2026-10-22 03:31:45",
+ "row": {
+  "tier": "A",
+  "overall": 88.8,
+  "floor_ok": true,
+  "schema": 100.0,
+  "schema_first_pass": 83.3,
+  "verbatim": 100.0,
+  "degraded": "0.0%",
+  "scenes": 100.0,
+  "scene_n": 21,
+  "missing": 0,
+  "visual_consistency": 82.1,
+  "prim_diversity": 1.0,
+  "hero": "0.5/0.5",
+  "richness": "32/2",
+  "seconds": 68.1,
+  "calls": 15,
+  "tokens_out": 25847
+ }
+}

@@ -5,8 +5,8 @@ from http.cookies import SimpleCookie
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlsplit, parse_qs, quote
 
-from . import db, auth, jobs, views
-from .. import planner, segment
+from . import db, auth, jobs, views, crypto, models as umodels
+from .. import planner, segment, llm
 
 ROOT = db.ROOT
 STATIC = pathlib.Path(__file__).resolve().parent / "static"
@@ -174,8 +174,29 @@ class H(BaseHTTPRequestHandler):
                 pass
 
     # ---------------- pages ----------------
+    def _labels(self):
+        u = self._user(); labs = dict(LABELS)
+        row = umodels.get_row(u["id"]) if u else None
+        if row:
+            v = umodels.public_view(row); c = v["config"]
+            st = {"ready": f"{v['tier']} 档 · 探针通过", "probing": "探针运行中…", "failed": "探针未通过"}[v["status"]]
+            labs = {"user": (f"我的模型 · {c.get('label') or c['model']}", f"{c['kind']} · {st}")} | labs
+        return labs
+
     def p_home(self):
-        self._html(200, views.layout("VibeReading · 把小说排成会呼吸的长文", views.home(self._user(), SAMPLE, jobs.llm_status(), LABELS), self._user()))
+        u = self._user()
+        self._html(200, views.layout("VibeReading · 把小说排成会呼吸的长文",
+                                     views.home(u, SAMPLE, jobs.user_llm_status(u["id"] if u else None), self._labels()), u))
+
+    def p_settings(self):
+        u = self._need_user()
+        v = umodels.public_view(umodels.get_row(u["id"]))
+        self._html(200, views.layout("模型设置 · VibeReading", views.settings(u, v, crypto.available(), jobs.llm_status()), u, current="settings"))
+
+    def p_quality(self, book_id):
+        u = self._need_user(); b = self._book_for(book_id, write=True)
+        q = json.loads(b["quality_json"]) if b["quality_json"] else None
+        self._html(200, views.layout(f"质量报告 ·《{b['title']}》", views.quality_page(u, b, q), u))
 
     def p_auth(self, mode):
         nxt = (self.q.get("next") or ["/shelf"])[0]
@@ -191,7 +212,7 @@ class H(BaseHTTPRequestHandler):
         books = c.execute("SELECT * FROM books WHERE user_id=? ORDER BY created_at DESC", (u["id"],)).fetchall()
         jb = {r["book_id"]: r["id"] for r in c.execute(
             "SELECT book_id, id FROM jobs WHERE user_id=? ORDER BY created_at ASC", (u["id"],)).fetchall()}
-        self._html(200, views.layout("我的书架 · VibeReading", views.shelf(u, books, jb, any(jobs.llm_status().values())), u, current="shelf"))
+        self._html(200, views.layout("我的书架 · VibeReading", views.shelf(u, books, jb, any(jobs.user_llm_status(u["id"]).values())), u, current="shelf"))
 
     def p_job(self, jid):
         u = self._need_user()
@@ -208,7 +229,11 @@ class H(BaseHTTPRequestHandler):
         f = (db.data_dir() / (b["html_path"] or "")).resolve()
         if not b["html_path"] or not f.is_file() or db.data_dir() not in f.parents:
             raise HTTPError(404, "这本书还没有生成好")
-        self._send(200, f.read_bytes(), "text/html; charset=utf-8", csp=CSP_READER)
+        body = f.read_bytes()
+        u = self._user()
+        if u and u["id"] == b["user_id"] and b["quality_json"]:
+            body = views.inject_author_badge(body, b)      # 作者视图：只有书的主人看得到质量徽标，分享出去的读者看不到
+        self._send(200, body, "text/html; charset=utf-8", csp=CSP_READER)
 
     def p_sample(self):
         self._send(200, (SAMPLE_DIR / "kongyiji.html").read_bytes(), "text/html; charset=utf-8",
@@ -273,23 +298,68 @@ class H(BaseHTTPRequestHandler):
 
     # ---------------- books api ----------------
     def a_config(self):
-        self._send(200, {"llm": jobs.llm_status(), "labels": {k: v[0] for k, v in LABELS.items()}, "max_chars": MAX_CHARS})
+        u = self._user()
+        self._send(200, {"llm": jobs.user_llm_status(u["id"] if u else None), "labels": {k: v[0] for k, v in self._labels().items()}, "max_chars": MAX_CHARS})
+
+    # ---------------- user model api ----------------
+    def _model_rate(self, uid, what, limit):
+        key = f"{what}:{uid}"
+        if auth._count(key, 600) >= limit:
+            raise HTTPError(429, "操作太频繁，10 分钟后再试", {"Retry-After": "600"})
+        auth._hit(key)
+
+    def a_model_get(self):
+        u = self._need_user()
+        self._send(200, {"model": umodels.public_view(umodels.get_row(u["id"])), "crypto": crypto.available(),
+                         "platform": {k: v for k, v in jobs.llm_status().items()}})
+
+    def a_model_save(self):
+        u = self._need_user(); body = self._json_body()
+        if jobs.active_job_for_user(u["id"]):
+            raise HTTPError(409, "有任务在运行，结束后再改模型")
+        self._model_rate(u["id"], "probe", 10)
+        try:
+            v = umodels.save(u["id"], body)
+        except umodels.ConfigError as e:
+            raise HTTPError(400, str(e))
+        self._send(200, {"model": v})
+
+    def a_model_test(self):
+        u = self._need_user(); body = self._json_body()
+        self._model_rate(u["id"], "mtest", 20)
+        try:
+            r = umodels.test(u["id"], body)
+        except umodels.ConfigError as e:
+            raise HTTPError(400, str(e))
+        except Exception as e:
+            r = {"ok": False, "error": llm.redact(f"{type(e).__name__}: {e}", body.get("api_key") or "")[:240]}
+        self._send(200, r)
+
+    def a_model_delete(self):
+        u = self._need_user(); self._json_body()
+        if jobs.active_job_for_user(u["id"]):
+            raise HTTPError(409, "有任务在运行，结束后再改模型")
+        umodels.delete(u["id"])
+        self._send(200, {"ok": True})
 
     def a_sample(self, name):
         self._send(200, {"text": SAMPLE["text"], "plan": SAMPLE["plan"], "title": "孔乙己", "author": "鲁迅"})
 
     @staticmethod
-    def _book_json(b, job=None):
+    def _book_json(b, job=None, owner=False):
         v = json.loads(b["verify_json"]) if b["verify_json"] else None
+        q = json.loads(b["quality_json"]) if owner and b["quality_json"] else None
         return {"id": b["id"], "title": b["title"], "author": b["author"], "chars": b["char_count"], "segments": b["segments"],
                 "status": b["status"], "visibility": b["visibility"], "model": b["model"], "seconds": b["seconds"],
                 "verify": v, "error": b["error"], "created_at": b["created_at"], "updated_at": b["updated_at"],
-                "url": f"/b/{b['id']}" if b["html_path"] else None, "job": job}
+                "url": f"/b/{b['id']}" if b["html_path"] else None, "job": job,
+                **({"quality": {k: q.get(k) for k in ("overall", "tier", "model_label", "floor_ok", "degraded_paragraph_ratio", "scores")},
+                    "quality_url": f"/b/{b['id']}/quality"} if q else {})}
 
     def a_books(self):
         u = self._need_user(); c = db.conn()
         rows = c.execute("SELECT * FROM books WHERE user_id=? ORDER BY created_at DESC", (u["id"],)).fetchall()
-        self._send(200, {"books": [self._book_json(r) for r in rows]})
+        self._send(200, {"books": [self._book_json(r, owner=True) for r in rows]})
 
     def a_create_book(self):
         u = self._need_user(); b = self._json_body()
@@ -304,12 +374,18 @@ class H(BaseHTTPRequestHandler):
             raise HTTPError(400, "plan.json 必须是 JSON 对象")
         model = b.get("model") or None
         if not plan:
-            try:
-                planner.resolve_model(model)
-            except ValueError as e:
-                raise HTTPError(400, str(e))
-            if not planner.llm_available(model):
-                raise HTTPError(400, "服务器没有配置模型 key（INCEPTION_API_KEY / DASHSCOPE_API_KEY），请改用 plan.json 模式")
+            if model is None and umodels.ready(u["id"]):
+                model = "user"                    # 配置了自己的模型（且探针通过）→ 默认用它
+            if model == "user":
+                if not umodels.ready(u["id"]):
+                    raise HTTPError(400, "你的模型还没有通过探针：到「模型设置」保存并等待探测完成")
+            else:
+                try:
+                    planner.resolve_model(model)
+                except ValueError as e:
+                    raise HTTPError(400, str(e))
+                if not planner.llm_available(model):
+                    raise HTTPError(400, "服务器没有配置模型 key（INCEPTION_API_KEY / DASHSCOPE_API_KEY），请改用 plan.json 模式，或在「模型设置」里配置你自己的模型")
         if jobs.active_job_for_user(u["id"]):
             raise HTTPError(429, "你已有一个任务在运行，等它结束再提交")
         name = str(b.get("name") or "")[:120]
@@ -325,8 +401,8 @@ class H(BaseHTTPRequestHandler):
             hero_max = min(3, max(1, int(b.get("hero_max") or 2)))
         except (TypeError, ValueError):
             hero_max = 2
-        if hero and not planner.llm_available("mercury"):
-            raise HTTPError(400, "关键场景动画需要 Mercury（服务器没有配置 INCEPTION_API_KEY）")
+        if hero and model != "user" and not planner.llm_available("mercury"):
+            raise HTTPError(400, "关键场景动画需要模型（服务器没有配置 INCEPTION_API_KEY，也没有配置你自己的模型）")
         jid = jobs.start(bid, u["id"], "build", plan=plan, model=model, verify=b.get("verify", True) is not False,
                          hero=hero or None, hero_max=hero_max)
         self._send(201, {"book": bid, "job": jid, "progress": f"/jobs/{jid}"})
@@ -335,7 +411,8 @@ class H(BaseHTTPRequestHandler):
         b = self._book_for(bid)
         j = db.conn().execute("SELECT id FROM jobs WHERE book_id=? ORDER BY created_at DESC LIMIT 1", (bid,)).fetchone()
         u = self._user()
-        self._send(200, self._book_json(b, j["id"] if j and u and u["id"] == b["user_id"] else None))
+        own = bool(u and u["id"] == b["user_id"])
+        self._send(200, self._book_json(b, j["id"] if j and own else None, owner=own))
 
     def a_rebuild(self, bid):
         u = self._need_user(); b = self._book_for(bid, write=True); body = self._json_body()
@@ -349,9 +426,14 @@ class H(BaseHTTPRequestHandler):
                 raise HTTPError(400, "还没有分镜可复用：首次生成失败的书请重新上传，或改用“重新规划”")
             jid = jobs.start(bid, u["id"], "rerender", verify=True)
         elif mode == "replan":
-            model = body.get("model") or (b["model"] if b["model"] and b["model"].split(":")[0] in planner.PROVIDERS else None)
+            model = body.get("model") or (b["model"] if b["model"] and b["model"].split(":")[0] in (*planner.PROVIDERS, "user") else None)
             model = model.split(":")[0] if model else None
-            if not planner.llm_available(model):
+            if model is None and umodels.ready(u["id"]):
+                model = "user"
+            if model == "user":
+                if not umodels.ready(u["id"]):
+                    raise HTTPError(400, "你的模型配置还没有通过探针，无法用它重新规划")
+            elif not planner.llm_available(model):
                 raise HTTPError(400, "服务器没有配置模型 key，无法重新规划；可以“沿用分镜重新渲染”")
             hero = True if body.get("hero") else None
             jid = jobs.start(bid, u["id"], "replan", model=model, verify=True, hero=hero,
@@ -397,6 +479,12 @@ ROUTES = [(m, re.compile(p), f) for m, p, f in [
     ("GET", r"/shelf", H.p_shelf),
     ("GET", r"/jobs/" + ID, H.p_job),
     ("GET", r"/b/" + ID, H.p_read),
+    ("GET", r"/b/" + ID + r"/quality", H.p_quality),
+    ("GET", r"/settings", H.p_settings),
+    ("GET", r"/api/model", H.a_model_get),
+    ("POST", r"/api/model", H.a_model_save),
+    ("POST", r"/api/model/test", H.a_model_test),
+    ("DELETE", r"/api/model", H.a_model_delete),
     ("GET", r"/sample/kongyiji", H.p_sample),
     ("GET", r"/static/([a-z0-9_\-]+\.(?:css|js))", H.p_static),
     ("GET", r"/healthz", H.p_health),

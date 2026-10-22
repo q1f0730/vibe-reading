@@ -18,6 +18,7 @@ def main(argv=None):
     m.add_argument("--model", help="分镜模型：mercury（默认，快速）/ qwen（质量）/ 具体模型名如 mercury-3、qwen3.8-max、qwen3.7-plus")
     m.add_argument("--fast", action="store_const", const="mercury", dest="model", help="快速模式 = mercury-3（默认）")
     m.add_argument("--quality", action="store_const", const="qwen", dest="model", help="质量模式 = qwen3.8-max")
+    m.add_argument("--model-config", help="自带模型：JSON 配置文件（格式同 evals/configs/*.json，key 只写环境变量名 api_key_env）；先跑探针分档再生成")
     b.add_argument("--effort", choices=["instant", "low", "medium", "high"], help="mercury 的 reasoning_effort（默认 instant）")
     h = b.add_mutually_exclusive_group()
     h.add_argument("--hero", dest="hero", action="store_const", const=True, default=None,
@@ -31,10 +32,22 @@ def main(argv=None):
     t0 = time.time()
     def prog(stage, msg):
         print(f"[{time.time() - t0:6.1f}s] {stage:8s} {msg}", file=sys.stderr, flush=True)
+    engine = None
+    if a.model_config:
+        import os
+        from . import llm, probe, tiers
+        d = json.loads(pathlib.Path(a.model_config).read_text(encoding="utf-8"))
+        env = d.pop("api_key_env", None); d.pop("name", None); force = d.pop("force_tier", None)
+        client = llm.Client(llm.ModelConfig.from_dict(d, api_key=os.environ.get(env) if env else None))
+        prof = probe.run(client, progress=lambda n, v: prog("probe", f"{n} {'✓' if v.get('ok') else '✕'}"))
+        if not prof.get("ok"):
+            print("错误：模型连不上：" + "; ".join(prof.get("errors") or []), file=sys.stderr); return 1
+        engine = tiers.Engine(client, prof, force or prof.get("tier"), source="user")
+        prog("probe", f"{engine.label} · {engine.tier} 档 · {'；'.join(prof.get('tier_reasons') or [])}")
     try:
       rep = build(text, a.output, title=a.title, author=a.author, work=a.work, theme=a.theme, plan_in=a.plan,
                 reuse_plan=a.reuse_plan, verify=a.verify, shots=a.shots, model=a.model, effort=a.effort, progress=prog,
-                hero=a.hero, hero_max=a.hero_max, hero_mode=a.hero_mode)
+                hero=a.hero, hero_max=a.hero_max, hero_mode=a.hero_mode, engine=engine)
     except RuntimeError as e:
         print(f"错误：{e}", file=sys.stderr); return 1
     llm = rep.get("llm", {})
@@ -42,6 +55,7 @@ def main(argv=None):
                       "model": f"{llm.get('provider')}:{llm.get('model')}", "llm_calls": llm.get("calls"), "retries": llm.get("retries"),
                       "json_first_pass": f"{llm.get('first_pass')}/{llm.get('tasks')}", "plan_seconds": rep["plan_seconds"],
                       "total_seconds": rep["total_seconds"], "verify": rep.get("verify"),
+                      "quality": {k: (rep.get("quality") or {}).get(k) for k in ("overall", "tier", "floor_ok", "degraded_paragraph_ratio")},
                       "hero": {k: rep["hero"].get(k) for k in ("mode", "selected", "passed_first", "passed_fixed", "rule", "fallback", "filtered", "llm_calls", "seconds", "skipped")} if rep.get("hero") else None}, ensure_ascii=False, indent=1))
     v = rep.get("verify")
     return 0 if (not v or v.get("ok")) else 2

@@ -101,6 +101,61 @@
 原文段落的渲染与逐段校验不经过这一阶段。结果写进 `plan.json` 的 `heroes`（复用分镜重新渲染时保留并重新校验；`--no-hero` 去掉），
 排查信息在 `<输出>.heroes.json`。开发时可用 `tools/prim_gallery.js` 对任意编排批量截图。
 
+## 模型无关的生成脚手架（用户自己配模型）
+
+模型由用户自己配置（强/弱、贵/便宜、有无 JSON 模式、会不会被内容过滤都可能），所以质量不能押在模型上：
+**不管接什么模型，原文逐字、校验和兜底都是同一套；档位只决定“给模型多大的活、约束多严、多早交给规则”**。强模型可以更好，但不会更差。
+
+```
+ 设置页填 base_url / model / key ──► ① Provider 层 llm.py ──► ② 能力探针 probe.py ──► 档案 + A/B/C 档（存库）
+                                                                     │
+ 生成任务 ──► Engine(client, 档案, 策略 tiers.py) ──► 规划 / hero 都只认 Engine ──► ④ 统一护栏 quality.py ──► 质量报告
+```
+
+| 层 | 文件 | 说明 |
+|---|---|---|
+| Provider | `vibereading/llm.py` | OpenAI 兼容（Mercury / 千问 / DeepSeek / OpenRouter / Gemini 兼容端点…）+ Anthropic 原生 + Gemini 原生；超时、429/5xx 指数退避（尊重 Retry-After）、每个配置一个并发闸、流式/非流式（SSE）、网关总时长上限；结构化输出三档（json_schema / Anthropic 强制 tool / Gemini responseJsonSchema → JSON 模式 → 提示词），提供方 400 拒绝某参数时自动降一档并记住；**推理吃光输出**（finish=length 且正文空或推理占大头）时自动降推理档 → 关推理；各家内容过滤信号统一成 `ContentFiltered`；key 只进请求头，`repr` / 报错 / 日志一律 `redact()` |
+| 探针 | `vibereading/probe.py` | 保存配置时自动跑约 11 次小调用：连通+延迟、JSON 模式、结构化输出、提示词 JSON、工具调用、最大输出（参数接受度 + 一次 160 项的真实长 JSON）、上下文（2 万字大海捞针）、是否推理模型、中文长文本（《孔乙己》逐段 JSON + 逐字摘句）、内容过滤倾向（《祝福》《孔乙己》含冲突的公版节选） |
+| 分档 / 策略 | `vibereading/tiers.py` | 档位 → 批次大小、上下文切块阈值、提示词详细度、few-shot 数、schema/enum 约束、修复轮数、每场景组件上限、hero 每章上限与镜头数、代码模式开关；再按探针实测的可靠输出 / 上下文收紧 |
+| 护栏 / 报告 | `vibereading/quality.py` | 见下 |
+| Web | `vibereading/web/models.py` `crypto.py` | 设置页 `/settings`（测试 / 保存并探测 / 删除）；key 用 AES-256-GCM 加密存库，主密钥只来自环境变量 `VR_SECRET_KEY`；base_url 默认禁止内网/回环地址且必须 https（防 SSRF） |
+
+### 分档规则（`probe.classify`）
+
+| 档 | 条件 | 打法 |
+|---|---|---|
+| **C** | 连不上；或 JSON 模式 / 结构化 / 提示词 JSON 都不行；或中文长文本 < 0.6；或可靠输出 < 2000 token；或上下文 < 8k | 每批 ≤8 段 / 1500 字，outline 预算 5000 字（超长文本更早按块规划），提示词附 2 条 few-shot + 【严格要求】（段号清单、人物 id / 组件 type 枚举），2 轮修复，每场景 ≤1 个组件，hero 每章 1 个、只用 2 镜头 |
+| **B** | 介于两者之间 | 每批 ≤16 段 / 3000 字，1 条 few-shot + 枚举约束，2 轮修复，每场景 ≤2 个组件，hero 每章 ≤2、≤3 镜头 |
+| **A** | 有原生结构化输出（schema 或 JSON 模式）且中文长文本 ≥ 0.9、可靠输出 ≥ 6000、上下文 ≥ 16k、内容过滤 0 误伤 | 每批 ≤28 段 / 5000 字，不加示例，1 轮修复，每场景 ≤3 个组件，hero 每章 ≤3、≤4 镜头；**代码模式**只对 A 档且可靠输出 ≥12000 开放，且仍默认关闭 |
+
+所有档：结构化约束取探针实测的最强一档；没有 JSON 模式就靠提示词 + 宽松解析（去代码块 / 拼接多段 JSON / 0→"" 等无歧义修正）。
+用户模型被内容过滤时**不会偷偷改用平台模型**：对半拆批重试，仍被拒的段落用规则分镜。平台 Mercury 被过滤时沿用旧行为改用平台千问。
+
+### 统一质量护栏（所有模型同一套）
+
+1. schema + 语义校验（段号完整、场景首尾相接）→ 带错误回灌修复（轮数按档）→ 对半拆批 → 规则分镜；
+2. **组件与原文一致性**（启发式）：`door` 附近 ±3 段要有“门”，`car_night` 要有“车”，`object` 的物件词、`interior` 的房间词、
+   `timeline` 标签必须出自本场景原文…；不一致先回灌让模型改，改不好由 `guard_plan` 直接去掉；同时按档限制每场景组件数、去掉夹带 ≥8 字原文的图注；
+3. hero：编排校验 + 镜头数上限 + **画面意象词与场景原文至少有字面关联** → 修一次 → 规则编排 → 预制组件；浏览器实测不变；
+4. 渲染后静态解析 HTML 的 `[data-src]` 逐段比对原文（不开浏览器也能确认逐字一致 / 漏段），开了 `--verify` 再用 Chromium 测外链 / JS 报错 / 溢出。
+
+每次生成附一张**质量报告**（`report.json` 的 `quality`，并存进 `books.quality_json`）：各项得分（schema 合格率、首次合格率、逐字一致、
+模型分镜覆盖率、场景分布、组件一致、组件/原语多样性、hero）、总分、**下限检查**（逐字 100%、无漏段、分镜完整、页面组件全部与原文一致、
+hero 全部通过实测或已回退、浏览器校验）、降级段落比例、用的模型 / 档位 / 自动适配事件、调用数 / token / 耗时。
+书架卡片上有一行“质量 · 档 · 降级 · 下限”，书的主人打开阅读页右下角有“作者视图”徽标，报告页 `/b/<id>/quality` 只有主人能看；分享链接的读者拿到的是原文件。
+
+### 评测套件 `evals/`
+
+```bash
+python3 evals/run.py evals/configs/mercury.json evals/configs/qwen.json evals/configs/weak-mercury.json   # 每个配置：探针 → 完整管线 → 分数卡
+python3 evals/run.py --scorecard                                                                       # 汇总成 evals/results/SCORECARD.md
+```
+
+固定文本 `evals/texts/zhufu.txt`（鲁迅《祝福》，公有领域，来源见 `evals/texts/SOURCE.md`）。配置里不写 key，只写环境变量名 `api_key_env`；
+`simulate`（仅评测）可以把强模型压成弱模型（不给 JSON 模式 / schema、限制输出 token），`force_tier` 做“不自适应”对照。
+分数卡列：档位、总分、下限、schema 合格率、首次合格、逐字一致、降级段落、场景分布、场景数、漏原文段、组件一致（护栏前）、原语多样性、hero、耗时、调用数、输出 token。
+最近一次结果见 [`evals/results/SCORECARD.md`](evals/results/SCORECARD.md)。
+
 ## 组件库
 
 `interior`（室内线描：kitchen / tavern / living / bedroom / classroom / office / hall）、`window`（窗与天气：晴/雨/雪/风/雾/夜）、
@@ -170,7 +225,9 @@ python3 server.py --host 127.0.0.1 --port 8765      # 打开 http://127.0.0.1:87
 |---|---|
 | `/` | 产品一句话 + 公开示例《孔乙己》入口 + 上传（未登录时上传区锁定） |
 | `/login` `/register` | 用户名或邮箱 + 密码 |
-| `/shelf` | 我的书架：标题 / 字数 / 段数 / 校验结果 / 生成时间 / 状态；打开、重新生成（沿用分镜重渲染 或 重新规划）、分享链接、删除；底部可注销账号 |
+| `/settings` | 模型设置：填自己的模型（OpenAI 兼容 / Anthropic / Gemini），「测试」连通，「保存并探测」后显示能力档案与 A/B/C 档；删除即回到平台默认 |
+| `/b/<id>/quality` | 质量报告（只有书的主人能看） |
+| `/shelf` | 我的书架：标题 / 字数 / 段数 / 校验结果 / 质量 · 档位 / 生成时间 / 状态；打开、重新生成（沿用分镜重渲染 或 重新规划）、分享链接、删除；底部可注销账号 |
 | `/jobs/<id>` | 生成进度（暗房风）：切分 → 规划 → 渲染 → 校验 四步 + 实时日志 + 时间码 |
 | `/b/<id>` | 阅读页。私密书只有本人能看（别人 403）；开启"链接可见"后拿到链接的人可读 |
 | `/sample/kongyiji` | 公开示例，无需登录 |
@@ -200,7 +257,7 @@ SQLite 单文件，默认在 `<仓库>/data/vibereading.db`（`VR_DATA_DIR` 可�
 ### 测试
 
 ```bash
-python3 -m unittest tests.test_web tests.test_longtext -v
+python3 -m pytest -q tests        # 或 python3 -m unittest discover tests
 ```
 
 `tests/test_longtext.py`（全部是合成文本，不含版权作品）：章名识别 / 硬换行判定；整本书规划在模拟的 429、内容过滤、单章异常下仍完成且只局部降级；
@@ -220,6 +277,8 @@ systemctl --user daemon-reload && systemctl --user enable --now vibereading     
 ```
 
 - key（可选）写在 `~/.config/vibereading.env`（`chmod 600`），单元文件用 `EnvironmentFile` 读取，不会出现在命令行或日志里。
+- **用户自带模型需要 `VR_SECRET_KEY`**（≥32 字符随机串，`python3 -c "import secrets;print(secrets.token_urlsafe(48))"`），同样写进 `~/.config/vibereading.env`；
+  丢了它，已保存的用户 key 都解不开（用户重新填一次即可）。本地自建模型（内网地址 / http）需要额外设 `VR_ALLOW_PRIVATE_LLM=1` / `VR_ALLOW_HTTP_LLM=1`。
 - 更新：`git pull && systemctl --user restart vibereading`（`ExecStartPre` 会自动跑数据库迁移）。
 - 放在反代 / HTTPS 后面时保持 `X-Forwarded-Proto` 与 `X-Forwarded-For` 头，cookie 会自动加 `Secure`，限速按真实 IP 计。
 - 也可以不用 systemd：`scripts/serve.sh 3000`。

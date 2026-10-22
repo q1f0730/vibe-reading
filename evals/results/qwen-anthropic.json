@@ -1,0 +1,280 @@
+{
+ "name": "qwen-anthropic",
+ "label": "千问 qwen3.8-flash（Anthropic 原生接口，默认开推理）",
+ "model": "qwen3.8-flash",
+ "kind": "anthropic",
+ "simulate": {},
+ "force_tier": null,
+ "probe": {
+  "version": 1,
+  "at": 1792640016,
+  "kind": "anthropic",
+  "model": "qwen3.8-flash",
+  "base_url": "https://maas.qianwenaiapi.com/apps/anthropic",
+  "errors": [],
+  "ok": true,
+  "latency": 1.17,
+  "json_mode": true,
+  "json_schema": true,
+  "json_prompt": true,
+  "tools": true,
+  "max_output_ok": 32000,
+  "context_ok": 27332,
+  "zh_long": 1.0,
+  "filter_blocked": 0,
+  "reasoning": false,
+  "reasoning_tokens": 0,
+  "adaptations": [],
+  "tier": "A",
+  "tier_reasons": [
+   "全部 A 档条件满足"
+  ],
+  "code_mode_ok": true,
+  "seconds": 31.3,
+  "calls": 12,
+  "tokens_out": 2894
+ },
+ "probe_detail": {
+  "ping": {
+   "ok": true,
+   "sec": 2.34,
+   "latency": 1.17,
+   "reasoning": false,
+   "reply": "OK"
+  },
+  "json_mode": {
+   "ok": true,
+   "sec": 1.19,
+   "native": true
+  },
+  "json_prompt": {
+   "ok": true,
+   "sec": 1.24
+  },
+  "json_schema": {
+   "ok": true,
+   "sec": 1.36,
+   "via_tool": true
+  },
+  "context": {
+   "ok": true,
+   "sec": 1.88,
+   "chars": 21025,
+   "context_ok": 27332
+  },
+  "tools": {
+   "ok": true,
+   "sec": 2.33
+  },
+  "zh_long": {
+   "ok": true,
+   "sec": 2.58,
+   "score": 1.0,
+   "coverage": 1.0,
+   "verbatim_quote": true
+  },
+  "filter": {
+   "ok": true,
+   "sec": 4.43,
+   "blocked": 0,
+   "of": 2
+  },
+  "max_output": {
+   "ok": true,
+   "sec": 27.72,
+   "accepted": 32000,
+   "produced_tokens": 2626,
+   "items": 160,
+   "max_output_ok": 32000
+  }
+ },
+ "probe_seconds": 31.3,
+ "strategy": {
+  "tier": "A",
+  "batch_paras": 28,
+  "batch_chars": 4783,
+  "outline_budget": 9566,
+  "book_segs": 200,
+  "pseudo_chapter": 120,
+  "prompt": "full",
+  "few_shot": 0,
+  "structured": "schema",
+  "enum_in_prompt": false,
+  "repair_rounds": 1,
+  "detail_max_tokens": 8000,
+  "visuals_per_scene": 3,
+  "hero_per_chapter": 3,
+  "hero_max_shots": 4,
+  "code_mode": true,
+  "concurrency": 4
+ },
+ "pipeline_seconds": 180.1,
+ "quality": {
+  "version": 1,
+  "model": "qwen3.8-flash",
+  "model_label": "千问 qwen3.8-flash（Anthropic 原生接口，默认开推理）",
+  "tier": "A",
+  "source": "eval",
+  "overall": 87.3,
+  "scores": {
+   "schema": 100.0,
+   "schema_first_pass": 83.3,
+   "verbatim": 100.0,
+   "coverage": 100.0,
+   "scenes": 100.0,
+   "visual_consistency": 77.8,
+   "diversity": 69.7,
+   "hero": 53.5
+  },
+  "floor_ok": true,
+  "floor": {
+   "verbatim_100": true,
+   "no_missing_text": true,
+   "plan_complete": true,
+   "visuals_consistent_after_guard": true,
+   "heroes_render_ok": true,
+   "browser_verify": true
+  },
+  "degraded_paragraph_ratio": 0.0,
+  "rule_paragraphs": 0,
+  "scene_distribution": {
+   "scenes": 16,
+   "min": 2,
+   "max": 15,
+   "median": 6.0,
+   "avg": 6.9,
+   "contiguous": true,
+   "rule_named": 0,
+   "score": 100.0
+  },
+  "diversity": {
+   "visuals": 28,
+   "visual_types": 11,
+   "component_diversity": 0.393,
+   "hero_shots": 5,
+   "hero_prims": 5,
+   "prim_diversity": 1.0
+  },
+  "hero": {
+   "count": 2,
+   "status": {
+    "rule": 1,
+    "ok": 1
+   },
+   "model_pass_rate": 0.5,
+   "degraded_rate": 0.5,
+   "imagery_consistency": 0.571
+  },
+  "guard": {
+   "visuals_total": 36,
+   "inconsistent": 8,
+   "capped": 0,
+   "caption_leaks": 0,
+   "kept": 28
+  },
+  "verbatim": {
+   "segments": 110,
+   "matched": 110,
+   "missing": [],
+   "missing_count": 0,
+   "mismatch": [],
+   "identical": true
+  },
+  "verify": {
+   "ok": true,
+   "text_identical": true,
+   "matched": 110,
+   "segments": 110,
+   "js_errors": [],
+   "external_requests": []
+  },
+  "cost": {
+   "calls": 14,
+   "plan_calls": 10,
+   "hero_calls": 4,
+   "tokens_out": 17571,
+   "tokens_in": 21802,
+   "reasoning_tokens": 0,
+   "retries": 4,
+   "transient": 0,
+   "content_filtered": 0,
+   "fallbacks": 0
+  },
+  "seconds": 180.1,
+  "adaptations": []
+ },
+ "verify": {
+  "ok": true,
+  "segments": 110,
+  "chapter_mode": false,
+  "text_identical": true,
+  "mismatches": [],
+  "matched": 110,
+  "overflow": {
+   "390": {
+    "scrollWidth": 390,
+    "innerWidth": 390,
+    "ok": true,
+    "offenders": []
+   },
+   "1280": {
+    "scrollWidth": 1280,
+    "innerWidth": 1280,
+    "ok": true,
+    "offenders": []
+   }
+  },
+  "external_requests": [],
+  "js_errors": []
+ },
+ "hero": {
+  "selected": 2,
+  "passed_first": 1,
+  "passed_fixed": 0,
+  "rule": 1,
+  "fallback": 0,
+  "filtered": 0,
+  "llm_calls": 4,
+  "tokens_out": 1727,
+  "mode": "prims",
+  "warnings": []
+ },
+ "warnings": [
+  "[detail 0-16] 仍有 2 个组件与原文不符，交给护栏去掉",
+  "[detail 17-43] 仍有 4 个组件与原文不符，交给护栏去掉",
+  "[detail 44-66] 仍有 1 个组件与原文不符，交给护栏去掉",
+  "[detail 85-109] 仍有 1 个组件与原文不符，交给护栏去掉",
+  "组件 interior@1 参数 ['room'] 不合法，已改用默认值",
+  "组件 interior@68 参数 ['props'] 不合法，已改用默认值",
+  "组件 ledger@102 参数 ['entries'] 不合法，已改用默认值",
+  "护栏：去掉与原文不符的组件 door@14 附近原文没有“门”",
+  "护栏：去掉与原文不符的组件 timeline@16 标签 ['夜里', '翌晨'] 不是本场景原文里的时间词",
+  "护栏：去掉与原文不符的组件 interior(hall)@17 所在场景原文里看不出是这个房间",
+  "护栏：去掉与原文不符的组件 door@29 附近原文没有“门”",
+  "护栏：去掉与原文不符的组件 door@32 附近原文没有“门”",
+  "护栏：去掉与原文不符的组件 object(bowl)@41 附近原文没有这个物件",
+  "护栏：去掉与原文不符的组件 door@47 附近原文没有“门”",
+  "护栏：去掉与原文不符的组件 object(bowl)@95 附近原文没有这个物件"
+ ],
+ "text": "evals/texts/zhufu.txt",
+ "at": "2026-10-22 03:37:07",
+ "row": {
+  "tier": "A",
+  "overall": 87.3,
+  "floor_ok": true,
+  "schema": 100.0,
+  "schema_first_pass": 83.3,
+  "verbatim": 100.0,
+  "degraded": "0.0%",
+  "scenes": 100.0,
+  "scene_n": 16,
+  "missing": 0,
+  "visual_consistency": 77.8,
+  "prim_diversity": 1.0,
+  "hero": "0.5/0.5",
+  "richness": "28/2",
+  "seconds": 180.1,
+  "calls": 14,
+  "tokens_out": 17571
+ }
+}

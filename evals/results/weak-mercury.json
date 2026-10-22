@@ -1,0 +1,274 @@
+{
+ "name": "weak-mercury",
+ "label": "模拟弱模型：Mercury + 输出上限 1200 + 不给 JSON 模式 / schema",
+ "model": "mercury-3",
+ "kind": "openai",
+ "simulate": {
+  "no_json_mode": 1,
+  "no_schema": 1,
+  "max_output": 1200
+ },
+ "force_tier": null,
+ "probe": {
+  "version": 1,
+  "at": 1792639906,
+  "kind": "openai",
+  "model": "mercury-3",
+  "base_url": "https://api.inceptionlabs.ai/v1",
+  "errors": [],
+  "ok": true,
+  "latency": 0.3,
+  "json_mode": false,
+  "json_schema": false,
+  "json_prompt": true,
+  "tools": true,
+  "max_output_ok": 1075,
+  "context_ok": 27332,
+  "zh_long": 1.0,
+  "filter_blocked": 0,
+  "reasoning": false,
+  "reasoning_tokens": 0,
+  "adaptations": [],
+  "tier": "C",
+  "tier_reasons": [
+   "可靠输出 1075 token < 2000"
+  ],
+  "code_mode_ok": false,
+  "seconds": 3.1,
+  "calls": 12,
+  "tokens_out": 1402
+ },
+ "probe_detail": {
+  "ping": {
+   "ok": true,
+   "sec": 0.6,
+   "latency": 0.3,
+   "reasoning": false,
+   "reply": "OK"
+  },
+  "json_mode": {
+   "ok": false,
+   "sec": 0.26,
+   "native": false
+  },
+  "json_schema": {
+   "ok": false,
+   "sec": 0.3,
+   "via_tool": false
+  },
+  "json_prompt": {
+   "ok": true,
+   "sec": 0.35
+  },
+  "context": {
+   "ok": true,
+   "sec": 0.29,
+   "chars": 21025,
+   "context_ok": 27332
+  },
+  "tools": {
+   "ok": true,
+   "sec": 0.39
+  },
+  "zh_long": {
+   "ok": true,
+   "sec": 0.51,
+   "score": 1.0,
+   "coverage": 1.0,
+   "verbatim_quote": true
+  },
+  "filter": {
+   "ok": true,
+   "sec": 0.51,
+   "blocked": 0,
+   "of": 2
+  },
+  "max_output": {
+   "ok": false,
+   "sec": 2.22,
+   "accepted": 1200,
+   "produced_tokens": 1195,
+   "items": 0,
+   "max_output_ok": 1075
+  }
+ },
+ "probe_seconds": 3.1,
+ "strategy": {
+  "tier": "C",
+  "batch_paras": 4,
+  "batch_chars": 1500,
+  "outline_budget": 5000,
+  "book_segs": 80,
+  "pseudo_chapter": 45,
+  "prompt": "strict",
+  "few_shot": 2,
+  "structured": "prompt",
+  "enum_in_prompt": true,
+  "repair_rounds": 2,
+  "detail_max_tokens": 913,
+  "visuals_per_scene": 1,
+  "hero_per_chapter": 1,
+  "hero_max_shots": 2,
+  "code_mode": false,
+  "concurrency": 2
+ },
+ "pipeline_seconds": 50.2,
+ "quality": {
+  "version": 1,
+  "model": "mercury-3",
+  "model_label": "模拟弱模型：Mercury + 输出上限 1200 + 不给 JSON 模式 / schema",
+  "tier": "C",
+  "source": "eval",
+  "overall": 94.0,
+  "scores": {
+   "schema": 100.0,
+   "schema_first_pass": 100.0,
+   "verbatim": 100.0,
+   "coverage": 100.0,
+   "scenes": 100.0,
+   "visual_consistency": 81.5,
+   "diversity": 67.8,
+   "hero": 100.0
+  },
+  "floor_ok": true,
+  "floor": {
+   "verbatim_100": true,
+   "no_missing_text": true,
+   "plan_complete": true,
+   "visuals_consistent_after_guard": true,
+   "heroes_render_ok": true,
+   "browser_verify": true
+  },
+  "degraded_paragraph_ratio": 0.0,
+  "rule_paragraphs": 0,
+  "scene_distribution": {
+   "scenes": 21,
+   "min": 1,
+   "max": 14,
+   "median": 4,
+   "avg": 5.2,
+   "contiguous": true,
+   "rule_named": 0,
+   "score": 100.0
+  },
+  "diversity": {
+   "visuals": 14,
+   "visual_types": 5,
+   "component_diversity": 0.357,
+   "hero_shots": 2,
+   "hero_prims": 2,
+   "prim_diversity": 1.0
+  },
+  "hero": {
+   "count": 1,
+   "status": {
+    "ok": 1
+   },
+   "model_pass_rate": 1.0,
+   "degraded_rate": 0.0,
+   "imagery_consistency": 1.0
+  },
+  "guard": {
+   "visuals_total": 27,
+   "inconsistent": 5,
+   "capped": 8,
+   "caption_leaks": 0,
+   "kept": 14
+  },
+  "verbatim": {
+   "segments": 110,
+   "matched": 110,
+   "missing": [],
+   "missing_count": 0,
+   "mismatch": [],
+   "identical": true
+  },
+  "verify": {
+   "ok": true,
+   "text_identical": true,
+   "matched": 110,
+   "segments": 110,
+   "js_errors": [],
+   "external_requests": []
+  },
+  "cost": {
+   "calls": 39,
+   "plan_calls": 37,
+   "hero_calls": 2,
+   "tokens_out": 8205,
+   "tokens_in": 80305,
+   "reasoning_tokens": 0,
+   "retries": 4,
+   "transient": 0,
+   "content_filtered": 0,
+   "fallbacks": 0
+  },
+  "seconds": 50.2,
+  "adaptations": []
+ },
+ "verify": {
+  "ok": true,
+  "segments": 110,
+  "chapter_mode": false,
+  "text_identical": true,
+  "mismatches": [],
+  "matched": 110,
+  "overflow": {
+   "390": {
+    "scrollWidth": 390,
+    "innerWidth": 390,
+    "ok": true,
+    "offenders": []
+   },
+   "1280": {
+    "scrollWidth": 1280,
+    "innerWidth": 1280,
+    "ok": true,
+    "offenders": []
+   }
+  },
+  "external_requests": [],
+  "js_errors": []
+ },
+ "hero": {
+  "selected": 1,
+  "passed_first": 1,
+  "passed_fixed": 0,
+  "rule": 0,
+  "fallback": 0,
+  "filtered": 0,
+  "llm_calls": 2,
+  "tokens_out": 580,
+  "mode": "prims",
+  "warnings": []
+ },
+ "warnings": [
+  "护栏：去掉与原文不符的组件 interior(hall)@32 所在场景原文里看不出是这个房间",
+  "护栏：去掉与原文不符的组件 window@35 所在场景原文里没有相关描写（窗/雨/雪…）",
+  "护栏：去掉与原文不符的组件 interior(hall)@52 所在场景原文里看不出是这个房间",
+  "护栏：去掉与原文不符的组件 interior(kitchen)@85 所在场景原文里看不出是这个房间",
+  "护栏：去掉与原文不符的组件 interior(hall)@99 所在场景原文里看不出是这个房间",
+  "护栏：每场景组件上限 1，去掉 8 个"
+ ],
+ "text": "evals/texts/zhufu.txt",
+ "at": "2026-10-22 03:32:38",
+ "row": {
+  "tier": "C",
+  "overall": 94.0,
+  "floor_ok": true,
+  "schema": 100.0,
+  "schema_first_pass": 100.0,
+  "verbatim": 100.0,
+  "degraded": "0.0%",
+  "scenes": 100.0,
+  "scene_n": 21,
+  "missing": 0,
+  "visual_consistency": 81.5,
+  "prim_diversity": 1.0,
+  "hero": "1.0/0.0",
+  "richness": "14/1",
+  "seconds": 50.2,
+  "calls": 39,
+  "tokens_out": 8205
+ }
+}

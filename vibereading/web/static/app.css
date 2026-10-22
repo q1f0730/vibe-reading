@@ -377,3 +377,24 @@ body.darkroom .btn.ghost:hover{border-color:var(--room-text)}
   .spec-page svg.counter path{stroke-dashoffset:0}
   .spec-page .first u{background-size:100% 2px}
 }
+
+/* ---- model settings / quality report ---- */
+.settings .mform{max-width:760px;margin-top:28px}
+.settings .mform .go-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
+.settings select.inp{appearance:auto}
+.mstatus{max-width:760px;margin-top:40px;border-top:1px solid var(--ink);padding-top:18px}
+.qtable{border-collapse:collapse;width:100%;max-width:760px;font-size:15px;margin:10px 0 22px}
+.qtable th,.qtable td{border-bottom:1px solid var(--rule);padding:8px 10px 8px 0;text-align:left;vertical-align:top}
+.qtable th{font-weight:500;color:var(--ink2);width:46%}
+.qtable td{font-family:var(--mono);font-size:13px;word-break:break-word}
+.qtable.wide th{width:22%}
+.qgrid{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:22px}
+@media (max-width:760px){.qgrid{grid-template-columns:1fr;gap:0}}
+.quality h3,.mstatus h3{font-size:18px;margin:18px 0 4px}
+.qline{font-family:var(--mono);font-size:11px;letter-spacing:.06em;margin:4px 0 2px}
+.qline a{color:var(--ink2);text-decoration:none;border-bottom:1px dotted var(--ink3)}
+.qline a:hover{color:var(--cinnabar)}
+ul.hint{margin:4px 0 12px 18px;color:var(--ink2);font-size:14px}
+.settings .hint,.qtable td{overflow-wrap:anywhere}
+.settings select.inp{width:100%;max-width:100%;text-overflow:ellipsis}
+.settings h1,.quality h1{font-size:clamp(38px,6.4vw,68px)}

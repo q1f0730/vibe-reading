@@ -149,8 +149,8 @@ class Orchestration(unittest.TestCase):
     def test_fix_then_rule(self):
         sel = {"heroes": [dict(SELECT_JSON["heroes"][0], title="今天的风很大"), dict(SELECT_JSON["heroes"][1], at=33)]}
         bad = comp(("press", 0, .55, {"word": "今天的风"}), ("typeset", .5, 1, {"words": ["余温"]}))     # 原文重合
-        # 调用顺序：h1-1 首次（原文重合）→ h1-2 首次（坏）→ h1-1 修复（成功）→ h1-2 修复（仍坏 → 规则编排）
-        fake = FakeMercury([sel], [bad, {"shots": "nope"}, comp(("ink", .2, 1, {"word": "余温"}), ("press", 0, .3, {"word": "风"})), {"shots": []}])
+        # 调用顺序（章内逐个 hero 独立流水线）：h1-1 首次（原文重合）→ h1-1 修复（成功）→ h1-2 首次（坏）→ h1-2 修复（仍坏 → 规则编排）
+        fake = FakeMercury([sel], [bad, comp(("ink", .2, 1, {"word": "余温"}), ("press", 0, .3, {"word": "风"})), {"shots": "nope"}, {"shots": []}])
         with mock.patch.object(planner, "chat", fake), mock.patch.object(hero, "_check_comps", self.ok_check):
             hs = hero.run(self.seg, self.plan, per_chapter=2)
         H = {h["id"]: h for h in self.plan["heroes"]}

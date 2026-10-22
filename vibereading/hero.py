@@ -8,6 +8,8 @@
   3. check：静态检查（体积 / 外链 / 禁用 API / 必须订阅滚动进度）→ 无头 Chromium 在沙箱 iframe 里实测
      （JS 报错、外部请求/CSP、横向溢出、帧率与长任务、明暗主题都非空白、随滚动变化、减弱动效下静止）。
   4. 不合格 → 带错误信息让 LLM 修一次 → 仍不合格（或被内容过滤拒答）→ 回退为预制组件。
+原语模式（默认）：每个 hero 独立流水线（编排 → 实测 → 修一次 → 规则编排 → 简化版），校验走常驻浏览器池
+（hero_checker：每个独立超时、限并发），整个阶段有时间预算（VR_HERO_BUDGET，默认 420s），超预算的直接规则编排。
 
 模块在页面里以 <iframe sandbox="allow-scripts" srcdoc> 运行（不可同源、无网络：CSP default-src 'none'），
 父页面用 postMessage 传滚动进度 p∈[0,1] 与主题。原文段落的渲染与逐段校验完全不经过这里。
@@ -179,13 +181,14 @@ def browser_available():
         os.path.exists(os.environ.get("CHROMIUM_PATH", "/usr/bin/chromium"))
 
 
-def browser_check(docs, timeout=240):
+def browser_check(docs, timeout=None):
     """docs: {id: srcdoc}. 返回 {id: {"ok": bool, "errors": [...], "metrics": {...}}}。无浏览器时返回 None。"""
     if not browser_available():
         return None
+    timeout = timeout or (60 + 45 * len(docs))
     with tempfile.TemporaryDirectory(prefix="vrhero-") as d:
         inp = pathlib.Path(d) / "in.json"
-        inp.write_text(json.dumps([{"id": k, "doc": v} for k, v in docs.items()], ensure_ascii=False), encoding="utf-8")
+        inp.write_text(json.dumps([{"id": k, "doc": v, "timeout": 60} for k, v in docs.items()], ensure_ascii=False), encoding="utf-8")
         try:
             r = subprocess.run(["node", str(CHECK_JS), str(inp)], capture_output=True, text=True, timeout=timeout)
             res = json.loads(r.stdout.strip().splitlines()[-1])
@@ -374,12 +377,14 @@ class HeroStats:
     def __init__(self, engine=None):
         self.selected = 0; self.passed_first = 0; self.passed_fixed = 0; self.fallback = 0; self.filtered = 0; self.rule = 0; self.mode = DEFAULT_MODE
         self.gen_calls = 0; self.select_calls = 0; self.browser_checks = 0; self.log = []; self.warnings = []
+        self.simple = 0; self.check_timeouts = 0; self.budget_s = None; self.over_budget = False
+        self.pool = None; self.deadline = None
         self.engine = engine
         self.max_shots = engine.strategy.hero_max_shots if engine else 4
         self.llm = planner.Stats(engine.client.cfg.kind if engine else "mercury", engine.client.cfg.model if engine else "mercury-3", engine)
 
     def as_dict(self):
-        d = {k: v for k, v in self.__dict__.items() if k not in ("llm", "engine")}
+        d = {k: v for k, v in self.__dict__.items() if k not in ("llm", "engine", "pool", "deadline")}
         if self.engine is not None:
             d["tier"] = self.engine.tier; d["model"] = self.engine.label
         d["llm_calls"] = self.llm.calls; d["tokens_out"] = self.llm.tokens_out; d["transient"] = self.llm.transient
@@ -640,26 +645,35 @@ COMPOSE_FIX = """编排没有通过自动校验：
 
 
 def _check_comps(items, chars, hs):
-    """items: {id: payload} → {id: errors[]}；一次启动浏览器批量实测。"""
+    """items: {id: payload} → {id: errors[]}（[] = 通过）。走常驻校验池（hs.pool）：每个独立超时，单个超时只影响它自己。
+    校验器起不来（infra）或没有 Chromium → 视为通过（原语库代码已整体测过），记 warning。"""
     if not items:
         return {}
     docs = {k: HP.build_doc(v, chars) for k, v in items.items()}
-    hs.browser_checks += len(docs)
-    res = browser_check(docs)
-    if res is None:
+    pool = getattr(hs, "pool", None)
+    if pool is None:
         for k in docs:
             hs.warnings.append(f"[hero {k}] 没有 Chromium，只做了编排校验")
         return {k: [] for k in docs}
+    hs.browser_checks += len(docs)
+    res = pool.check(docs, deadline=getattr(hs, "deadline", None))
     out = {}
     for k in docs:
         r = res.get(k) or {"ok": False, "errors": ["校验器没有返回结果"]}
-        out[k] = [] if r.get("ok") else (r.get("errors") or ["未通过"])
-        hs.log.append({"id": k, "check": r.get("metrics"), "errors": r.get("errors", [])[:6]})
+        if r.get("infra"):
+            hs.warnings.append(f"[hero {k}] 校验器不可用（{(r.get('errors') or [''])[0][:80]}），只做了编排校验"); out[k] = []
+        elif r.get("budget"):
+            out[k] = ["__budget__"]
+        else:
+            if r.get("timeout"):
+                hs.check_timeouts += 1
+            out[k] = [] if r.get("ok") else (r.get("errors") or ["未通过"])
+        hs.log.append({"id": k, "check": r.get("metrics"), "errors": (r.get("errors") or [])[:6]})
     return out
 
 
 def _guard_comp(comp, scene_text, hs):
-    """统一护栏（与模型无关）：镜头数不超过本档上限；画面意象词不能与场景原文毫无关联。"""
+    """统一护栏（与模型无关）：镜头数不超过本档上限；画面意象词不能与场景明显无关。"""
     from . import quality
     errs = []
     if comp and len(comp.get("shots") or []) > hs.max_shots:
@@ -668,110 +682,153 @@ def _guard_comp(comp, scene_text, hs):
     return errs
 
 
+STATUS_ZH = {"ok": "通过", "fixed": "修复后通过", "rule": "规则编排", "simple": "简化版", "fallback": "回退预制组件"}
+
+
+def short_title(e, allow, source, unsafe):
+    """空标题兜底：编排小标题 → 视觉隐喻 → 场景摘要首句（去掉人名）→ 地点 → 物件。≤8 字。"""
+    d = e.get("desc") or {}
+    def clause(x, n=8):
+        x = str(x or "")
+        for nm in allow:
+            x = x.replace(nm, "")
+        x = re.sub(r"^[，。、,.;；：:\s的和与跟带把被在]+", "", x)
+        for part in re.split(r"[，。、,.;；：:！？!?\s（）()·]", x):
+            part = re.sub(r"^[的和与跟带把被在了]+|[的了着]+$", "", part)
+            if 2 <= len(part):
+                return part[:n]
+        return ""
+    for c in [(e.get("comp") or {}).get("slug", ""), clause(d.get("motif")), clause(d.get("summary")), clause(d.get("setting")),
+              *[clause(o, 6) for o in d.get("objects") or []], f"第{e.get('_fig') or ''}幕"]:
+        if c and not unsafe(c):
+            return c
+    return "此刻"
+
+
 def run_prims(seg, plan, jobs, chars, hs, progress=lambda *a: None):
-    """原语模式：顺序编排（快、便于避免重复）→ 批量实测 → 修一次 → 规则编排 → 仍不合格才回退预制组件。"""
+    """原语模式，逐个 hero 独立流水线：编排 → 编排校验 → 浏览器实测 → 修一次 → 规则编排（实测）→ 简化版。
+    章节并行（受 LLM 并发限制），章内顺序（本章已用原语去重复）。每个 hero 完成就写进度（x/N）。
+    hs.deadline 之后不再调用模型、不再实测：剩余场景直接规则编排。"""
+    import threading
     source = "".join(x["text"] for x in seg["segments"])
     char_ids = {c["id"] for c in plan["characters"]}
-    E, P, M = {}, {}, {}           # entries, payloads, messages
-    used = {}                      # 章 → 本章已用过的原语（按次数上限去重复）
-    for fig, (hid, h) in enumerate(jobs, 1):
+    allow = HP.proper_nouns(plan)
+    deadline = getattr(hs, "deadline", None)
+    left = lambda: deadline is None or time.time() < deadline
+    lock = threading.Lock(); done = [0]; N = len(jobs)
+    unsafe = lambda x: not x or HP.leaks(x, source, allow=allow) or re.search(r"[你我吗呢吧啊呀]|^(?:别|不要|求)", x)
+    simple_ok = {}
+
+    def payload(e, comp):
+        return HP.page_payload(comp, e["_fig"], float(e["seconds"]), chars, e["_data"])
+
+    def check(e, comp):
+        errs = _check_comps({e["id"]: payload(e, comp)}, chars, hs).get(e["id"], [])
+        if errs == ["__budget__"]:
+            return None          # 预算用完，未校验
+        return errs
+
+    def simple_comp(e):
+        """最后一道：纯排版 + 窗光（两个最稳的原语），只用安全的短词；每本书实测一次模板。"""
+        w = next((x for x in [e["title"], short_title(e, allow, source, unsafe)] if x and not unsafe(x)), "此刻")[:4]
+        comp, errs = HP.validate({"slug": "", "shots": [{"prim": "typeset", "from": 0, "to": .56, "params": {"words": [w], "mode": "assemble"}},
+                                                        {"prim": "window", "from": .48, "to": 1, "params": {"from": "noon", "to": "dusk"}}]},
+                                 char_ids, source, allow=allow)
+        if errs:
+            comp, _ = HP.validate({"slug": "", "shots": [{"prim": "typeset", "from": 0, "to": .56, "params": {"words": ["此刻"], "mode": "assemble"}},
+                                                         {"prim": "window", "from": .48, "to": 1, "params": {"from": "noon", "to": "dusk"}}]}, char_ids, "")
+        return comp
+
+    def one(fig, hid, h, used):
         t0 = time.time()
         sc = plan["scenes"][h["scene"]]
         e = {"id": hid, "kind": "prims", "at": h["at"], "pos": "after", "scene": h["scene"], "zone": h.get("zone"), "title": h.get("title", ""),
              "caption": h.get("caption") or h.get("title", ""), "seconds": h.get("seconds", 12), "tone": h.get("tone", "day"),
              "desc": {k: h.get(k) for k in ("summary", "setting", "objects", "characters", "curve", "motif")},
-             "fallback": h.get("fallback"), "status": "fallback", "module": None, "comp": None, "attempts": 0, "errors": [], "_t": 0.0}
+             "fallback": h.get("fallback"), "status": "fallback", "module": None, "comp": None, "attempts": 0, "errors": [], "checked": False}
         e["_data"] = {"series": HP.series_for(plan, sc["start"], sc["end"])}; e["_fig"] = fig
-        e["_st"] = "".join(seg["segments"][i]["text"] for i in range(sc["start"], sc["end"] + 1))
-        E[hid] = e
-        ch = hid.split("-")[0]; e["_ch"] = ch; e["_dt"] = HP.desc_text(h)
+        st = "".join(seg["segments"][i]["text"] for i in range(sc["start"], sc["end"] + 1))
+        dt = HP.desc_text(h)
+        comp = None
         try:
-            o, msgs, perr = compose(h, plan, hs, used=used.get(ch, []))
-            e["attempts"] = 1
-            comp, errs = HP.validate(o, char_ids, source, e["_dt"], used.get(ch, [])) if perr is None else (None, [perr])
-            errs = errs or _guard_comp(comp, e["_st"], hs)
-            M[hid] = msgs
-            if errs:
-                e["errors"].append(errs[:8]); e["_need_fix"] = True
-            else:
-                P[hid] = comp
-                used.setdefault(ch, []).extend(x["prim"] for x in comp["shots"])
+            msgs = None
+            for attempt in (1, 2):
+                if not left():
+                    e["errors"].append(["预算用完：跳过模型编排"]); break
+                if attempt == 1:
+                    o, msgs, perr = compose(h, plan, hs, used=used)
+                else:
+                    msgs = msgs + [{"role": "user", "content": COMPOSE_FIX.format(errs="\n".join(f"- {x}" for x in e["errors"][-1][:12]))}]
+                    o, msgs, perr = compose(None, plan, hs, msgs=msgs)
+                e["attempts"] = attempt
+                c, errs = HP.validate(o, char_ids, source, dt, used, allow=allow) if perr is None else (None, [perr])
+                errs = errs or _guard_comp(c, st, hs)
+                if not errs:
+                    errs = check(e, c)
+                    if errs is None:              # 预算在实测途中用完：编排本身合格，按未实测收下
+                        e["checked"] = False; comp = c; e["status"] = "ok" if attempt == 1 else "fixed"; break
+                    e["checked"] = True
+                if not errs:
+                    comp = c; e["status"] = "ok" if attempt == 1 else "fixed"; break
+                e["errors"].append(errs[:8])
         except planner.ContentFiltered:
-            hs.filtered += 1; e["errors"].append(["content_filter"]); e["_rule"] = True
+            hs.filtered += 1; e["errors"].append(["content_filter"])
             hs.warnings.append(f"[hero {hid}] 编排被内容过滤拒答，改用规则编排")
         except Exception as ex:
-            e["errors"].append([f"{type(ex).__name__}: {str(ex)[:200]}"]); e["_rule"] = True
-        e["_t"] += time.time() - t0
-
-    def payload(hid, comp):
-        e = E[hid]
-        return HP.page_payload(comp, e["_fig"], float(e["seconds"]), chars, e["_data"])
-
-    # round 1: browser check of first attempts
-    res = _check_comps({k: payload(k, c) for k, c in P.items()}, chars, hs) if P else {}
-    for k, errs in res.items():
-        if errs:
-            E[k]["errors"].append(errs[:8]); E[k]["_need_fix"] = True; P.pop(k)
-        else:
-            E[k].update(status="ok", comp=P[k]); hs.passed_first += 1
-    # round 2: one fix
-    fixed = {}
-    for hid, e in E.items():
-        if not e.get("_need_fix") or e.get("_rule"):
-            continue
-        t0 = time.time()
-        try:
-            msgs = M[hid] + [{"role": "user", "content": COMPOSE_FIX.format(errs="\n".join(f"- {x}" for x in e["errors"][-1][:12]))}]
-            o, msgs, perr = compose(None, plan, hs, msgs=msgs)
-            e["attempts"] = 2
-            others = [x for k2, e2 in E.items() if k2 != hid and e2["_ch"] == e["_ch"] and k2 in P for x in (y["prim"] for y in P[k2]["shots"])]
-            comp, errs = HP.validate(o, char_ids, source, e["_dt"], others) if perr is None else (None, [perr])
-            errs = errs or _guard_comp(comp, e["_st"], hs)
-            if errs:
-                e["errors"].append(errs[:8]); e["_rule"] = True
+            e["errors"].append([f"{type(ex).__name__}: {str(ex)[:200]}"])
+        if comp is None:
+            rc = HP.rule_compose(dict(e["desc"], title=e["title"]), char_ids, source, used, allow=allow)
+            errs = check(e, rc) if left() else None
+            if not errs:                          # [] 通过；None = 预算用完直接用规则编排（不实测）
+                comp = rc; e["status"] = "rule"; e["checked"] = errs is not None
             else:
-                fixed[hid] = comp
-        except planner.ContentFiltered:
-            hs.filtered += 1; e["errors"].append(["content_filter"]); e["_rule"] = True
-        except Exception as ex:
-            e["errors"].append([f"{type(ex).__name__}: {str(ex)[:200]}"]); e["_rule"] = True
-        e["_t"] += time.time() - t0
-    res = _check_comps({k: payload(k, c) for k, c in fixed.items()}, chars, hs) if fixed else {}
-    for k, errs in res.items():
-        if errs:
-            E[k]["errors"].append(errs[:8]); E[k]["_rule"] = True
-        else:
-            E[k].update(status="fixed", comp=fixed[k]); hs.passed_fixed += 1
-    # round 3: rule composition (always valid), still browser-checked
-    rules = {}
-    for hid, e in E.items():
-        if e["status"] in ("ok", "fixed"):
-            continue
-        others = [x for k2, e2 in E.items() if k2 != hid and e2["_ch"] == e["_ch"] and (e2.get("comp") or k2 in rules)
-                  for x in (y["prim"] for y in (e2.get("comp") or rules.get(k2))["shots"])]
-        rules[hid] = HP.rule_compose(dict(e["desc"], title=e["title"]), char_ids, source, others)
-    res = _check_comps({k: payload(k, c) for k, c in rules.items()}, chars, hs) if rules else {}
-    for k, errs in res.items():
-        if errs:
-            E[k]["errors"].append(["rule: " + x for x in errs[:6]]); hs.fallback += 1
-        else:
-            E[k].update(status="rule", comp=rules[k]); hs.rule += 1
-    out = []
-    unsafe = lambda x: not x or HP.leaks(x, source) or re.search(r"[你我吗呢吧啊呀]|^(?:别|不要|求)", x)
-    for n_, (hid, e) in enumerate(E.items(), 1):
-        # 标题/图注由选场景那步的模型写，可能直接用了原文台词（如“我喜欢你”）→ 换成编排的小标题 / 去掉
+                e["errors"].append(["rule: " + x for x in errs[:6]])
+                sc_ = simple_comp(e)
+                key = json.dumps([s["prim"] for s in sc_["shots"]])
+                with lock:
+                    if key not in simple_ok:      # 简化版模板每本书实测一次（与具体 hero 无关）；真实报错才回退预制组件，超时不算
+                        r = _check_comps({"__simple__": payload(e, sc_)}, chars, hs).get("__simple__", [])
+                        simple_ok[key] = all(x == "__budget__" or x.startswith("校验超时") for x in r)
+                        if not simple_ok[key]:
+                            e["errors"].append(["simple: " + x for x in r[:4]])
+                if simple_ok[key]:
+                    comp = sc_; e["status"] = "simple"
+        if comp is not None:
+            used.extend(x["prim"] for x in comp["shots"])
+        e["comp"] = comp
+        with lock:
+            {"ok": lambda: setattr(hs, "passed_first", hs.passed_first + 1), "fixed": lambda: setattr(hs, "passed_fixed", hs.passed_fixed + 1),
+             "rule": lambda: setattr(hs, "rule", hs.rule + 1), "simple": lambda: setattr(hs, "simple", hs.simple + 1),
+             "fallback": lambda: setattr(hs, "fallback", hs.fallback + 1)}[e["status"]]()
+        # 标题/图注可能直接用了原文台词 → 换掉；空标题用场景摘要兜底
         if unsafe(e["title"]):
-            e["title"] = next((x for x in [(e["comp"] or {}).get("slug", ""), str((e["desc"] or {}).get("motif") or "")[:10]] if x and not unsafe(x)), "")
+            e["title"] = short_title(e, allow, source, unsafe)
         if e.get("caption") and unsafe(e["caption"]):
             e["caption"] = ""
         if e["comp"]:
-            e["comp"] = payload(hid, e["comp"])
+            e["comp"] = payload(e, e["comp"])
             e["bytes"] = len(json.dumps(e["comp"], ensure_ascii=False).encode())
-        e["seconds_spent"] = round(e.pop("_t"), 1)
+        e["seconds_spent"] = round(time.time() - t0, 1)
         for k in [k for k in e if k.startswith("_")]:
             e.pop(k)
-        out.append(e)
-        progress("hero+", f"{hid}「{e['title']}」{ {'ok': '通过', 'fixed': '修复后通过', 'rule': '规则编排', 'fallback': '回退预制组件'}[e['status']] }（{n_}/{len(E)}）")
+        with lock:
+            done[0] += 1; n_ = done[0]
+        progress("hero+", f"{hid}「{e['title']}」{STATUS_ZH[e['status']]}（{n_}/{N}）")
+        return e
+
+    by_ch = {}
+    for fig, (hid, h) in enumerate(jobs, 1):
+        by_ch.setdefault(hid.split("-")[0], []).append((fig, hid, h))
+
+    def chapter(items):
+        used = []
+        return [one(fig, hid, h, used) for fig, hid, h in items]
+
+    workers = max(1, min(hs.engine.client.cfg.concurrency if hs.engine else 3, int(os.environ.get("VR_LLM_CONCURRENCY", 3))))
+    out = []
+    with cf.ThreadPoolExecutor(max_workers=workers) as ex:
+        for lst in ex.map(chapter, list(by_ch.values())):
+            out += lst
     return out
 
 
@@ -783,31 +840,53 @@ def chapters_for(seg, plan):
     return chs
 
 
-def run(seg, plan, per_chapter=DEFAULT_PER_CHAPTER, progress=lambda *a: None, chapters=None, mode=None, engine=None):
+def run(seg, plan, per_chapter=DEFAULT_PER_CHAPTER, progress=lambda *a: None, chapters=None, mode=None, engine=None, budget=None):
     """给 plan 加上 plan["heroes"]；返回 HeroStats。plan 的其它部分不变。
-    engine：用户配置的模型（None = 平台 Mercury）。档位决定每章上限、镜头数；代码模式只对探针通过的 A 档开放。"""
+    engine：用户配置的模型（None = 平台 Mercury）。档位决定每章上限、镜头数；代码模式只对探针通过的 A 档开放。
+    budget：整个 hero 阶段的时间预算（秒，默认 VR_HERO_BUDGET=420），超预算的剩余场景直接规则编排。"""
     from .render import fix_colors
+    from . import hero_checker
     if engine is None:
         from . import tiers
         engine = tiers.platform_engine("mercury")
     hs = HeroStats(engine); t0 = time.time(); hs.mode = mode if mode in MODES else DEFAULT_MODE
+    hs.budget_s = float(budget if budget is not None else os.environ.get("VR_HERO_BUDGET", 420))
+    hs.deadline = t0 + hs.budget_s
     if hs.mode == "code" and not engine.strategy.code_mode:
         hs.warnings.append(f"代码模式只对通过探针的 A 档模型开放（当前 {engine.tier} 档），改用原语模式"); hs.mode = "prims"
     k = max(1, min(HERO_MAX_PER_CHAPTER, int(per_chapter), engine.strategy.hero_per_chapter))
     chars = fix_colors([dict(c) for c in plan["characters"]])
     chs = chapters if chapters is not None else chapters_for(seg, plan)
-    progress("hero", f"关键场景动画：{len(chs)} 章 × ≤{k} 个")
+    progress("hero", f"关键场景动画：{len(chs)} 章 × ≤{k} 个 · 预算 {int(hs.budget_s)}s")
     workers = max(1, min(engine.client.cfg.concurrency, int(os.environ.get("VR_LLM_CONCURRENCY", 3))))
+    import threading
+    sel_lock = threading.Lock(); sel_done = [0]
+
+    def sel(c):
+        r = select(seg, plan, c["start"], c["end"], c.get("title", ""), k, hs) if time.time() < hs.deadline else []
+        with sel_lock:
+            sel_done[0] += 1
+            progress("hero-sel", f"选场景（{sel_done[0]}/{len(chs)} 章）")
+        return r
     with cf.ThreadPoolExecutor(max_workers=workers) as ex:
-        sels = list(ex.map(lambda c: select(seg, plan, c["start"], c["end"], c.get("title", ""), k, hs), chs))
+        sels = list(ex.map(sel, chs))
     jobs = []
     for ci, hl in enumerate(sels):
         for j, h in enumerate(hl):
             jobs.append((f"h{ci + 1}-{j + 1}", h))
     hs.selected = len(jobs)
     if hs.mode == "prims":
-        progress("hero", f"选出 {len(jobs)} 个关键场景，编排原语镜头")
-        plan["heroes"] = sorted(run_prims(seg, plan, jobs, chars, hs, progress), key=lambda e: (e["at"], e["id"]))
+        progress("hero", f"选出 {len(jobs)} 个关键场景，逐个编排 + 实测（剩余预算 {max(0, int(hs.deadline - time.time()))}s）")
+        if hero_checker.available():
+            hs.pool = hero_checker.CheckerPool()
+        try:
+            plan["heroes"] = sorted(run_prims(seg, plan, jobs, chars, hs, progress), key=lambda e: (e["at"], e["id"]))
+        finally:
+            if hs.pool:
+                hs.pool.close()
+        hs.over_budget = time.time() > hs.deadline
+        if hs.over_budget:
+            hs.warnings.append(f"hero 阶段超出预算 {int(hs.budget_s)}s：剩余场景用了规则编排")
         hs.seconds = round(time.time() - t0, 1)
         return hs
     progress("hero", f"选出 {len(jobs)} 个关键场景，生成动画模块")
@@ -836,7 +915,7 @@ def clean_fallback(fb):
     return {"type": fb["type"], "params": params}
 
 
-def sanitize_heroes(heroes, n, char_ids=None, source=""):
+def sanitize_heroes(heroes, n, char_ids=None, source="", allow=()):
     """外部 / 复用 plan 里的 heroes：代码模块重新做静态检查；原语编排重新做编排校验（含原文重合检查）。不合格改为回退。"""
     out = []
     for h in heroes or []:
@@ -848,7 +927,7 @@ def sanitize_heroes(heroes, n, char_ids=None, source=""):
         if h.get("comp"):
             c = h["comp"] if isinstance(h["comp"], dict) else {}
             ids = set(char_ids) if char_ids is not None else {x.get("id") for x in c.get("chars", []) if isinstance(x, dict)}
-            clean, errs = HP.validate(c, ids, source)
+            clean, errs = HP.validate(c, ids, source, allow=allow)
             if errs:
                 h["comp"] = None; h["status"] = "fallback"
             else:

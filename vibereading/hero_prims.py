@@ -138,15 +138,50 @@ def _texts(prim, params):
     return out
 
 
-def leaks(text, source, n=4):
-    """text 里有没有 ≥n 字的片段原样出现在原文里。返回命中的片段或 None。"""
-    t = re.sub(r"\s+", "", text)
-    if len(t) < n or not source:
+# 真正的“摘原文”要么是 ≥5 字的连续重合，要么是带虚字/人称的 4 字短语（如“今天的风”）；
+# 不含这些字的 4 字以内实词（“生育能力”“睫毛膏痕”）只是常见词，不算原文重合。
+PARTICLES = set("的了着过吗呢吧啊呀么我你他她它们是在就也都和与把被这那得地之其")
+
+
+def proper_nouns(plan, title=None):
+    """专有名词白名单：人物名/别名、场景地点、书名/章名。画面上出现它们不算原文重合。按长度降序。"""
+    out = set()
+    for c in (plan or {}).get("characters") or []:
+        for x in [c.get("name")] + list(c.get("aliases") or []):
+            if isinstance(x, str) and len(x.strip()) >= 2:
+                out.add(x.strip())
+    for sc in (plan or {}).get("scenes") or []:
+        for x in re.split(r"[，。、,.;；：:\s（）()·/|和与的]+", str(sc.get("place") or "")):
+            if 2 <= len(x) <= 8:
+                out.add(x)
+    meta = (plan or {}).get("meta") or {}
+    for x in [title, meta.get("title"), meta.get("work")]:
+        if isinstance(x, str) and 2 <= len(x.strip()) <= 30:
+            out.add(re.sub(r"[《》]", "", x.strip()))
+    return sorted(out, key=len, reverse=True)
+
+
+def leaks(text, source, n=4, allow=()):
+    """text 里有没有片段原样出现在原文里（专有名词先剔除）。返回命中的片段或 None。
+    规则：连续重合 ≥n+1 字算；恰好 n 字时只有带虚字/人称（短语、台词）才算，单独的常见实词不算。"""
+    t = re.sub(r"\s+", "", str(text or ""))
+    for nm in allow or ():
+        if nm:
+            t = t.replace(nm, "\x00")
+    if len(t.replace("\x00", "")) < n or not source:
         return None
+    best = ""
     for i in range(len(t) - n + 1):
-        if t[i:i + n] in source:
-            return t[i:i + n]
-    return None
+        j = i + n
+        if "\x00" in t[i:j] or t[i:j] not in source:
+            continue
+        while j < len(t) and t[j] != "\x00" and t[i:j + 1] in source:
+            j += 1
+        hit = t[i:j]
+        if len(hit) > n or any(ch in PARTICLES for ch in hit):
+            if len(hit) > len(best):
+                best = hit
+    return best or None
 
 
 def blocked(used):
@@ -155,7 +190,7 @@ def blocked(used):
     return {k for k, v in c.items() if (k in ONCE and v >= 1) or v >= 2}
 
 
-def validate(comp, char_ids, source="", desc_text=None, used=None):
+def validate(comp, char_ids, source="", desc_text=None, used=None, allow=()):
     """返回 (清洗后的 comp, errors[])。errors 为空才算合格。会做小修：夹紧区间、截断超长字、丢弃未知参数。
     desc_text：场景描述文本（检查具象原语的物件是否真在场景里）；used：本章前面 hero 已用过的原语（检查次数上限）。"""
     import jsonschema
@@ -212,7 +247,7 @@ def validate(comp, char_ids, source="", desc_text=None, used=None):
                 errs.append(f"镜头 {k}（{s['prim']}）{name}={val!r}：像人物台词（人称/语气词/祈使），画面上只能是意象短词")
             if _PUNCT.search(val):
                 errs.append(f"镜头 {k}（{s['prim']}）{name}={val!r}：画面文字不能带标点，只能是意象短词")
-            hit = leaks(val, source)
+            hit = leaks(val, source, allow=allow)
             if hit:
                 errs.append(f"镜头 {k}（{s['prim']}）{name}={val!r}：与原文重合（“{hit}”），画面上只能用你自己的意象短词，不能摘原文")
         clean.append({"prim": s["prim"], "from": round(a, 3), "to": round(b, 3), "params": params})
@@ -248,7 +283,7 @@ def validate(comp, char_ids, source="", desc_text=None, used=None):
             errs.append("chart 最多用一次")
     slug = comp.get("slug") if isinstance(comp.get("slug"), str) else ""
     slug = _PUNCT.sub("·", slug.strip())[:10]
-    if slug and leaks(slug, source):
+    if slug and leaks(slug, source, allow=allow):
         slug = ""
     return {"slug": slug, "shots": clean}, errs
 
@@ -258,14 +293,14 @@ def desc_text(h):
     return " ".join(str(x) for x in [h.get("title", ""), h.get("summary", ""), h.get("setting", ""), h.get("motif", ""), " ".join(map(str, h.get("objects") or []))])
 
 
-def rule_compose(h, char_ids, source="", used=None):
+def rule_compose(h, char_ids, source="", used=None, allow=()):
     """规则编排：一定合格。按场景描述里的物件/隐喻关键词挑一个“物件/光影”镜头，再接关系图或排版；遵守本章次数上限。"""
     text = desc_text(h)
     nope = blocked(used)
     def word(*cands, n=4):
         for c in cands:
             c = re.split(r"[，。、,.;；：:\s（）()·]", str(c or "").strip())[0][:n]
-            if len(c) >= 2 and not leaks(c, source):
+            if len(c) >= 2 and not leaks(c, source, allow=allow):
                 return c
         return ""
     objs = [str(x) for x in (h.get("objects") or [])]
@@ -304,7 +339,7 @@ def rule_compose(h, char_ids, source="", used=None):
     second = second or {"prim": "typeset", "params": {"words": [word(h.get("motif"), "余音")], "mode": "scatter"}}
     slug = "·".join(x for x in [word(h.get("setting"), n=4), title if title != word(h.get("setting"), n=4) else ""] if x)[:10]
     shots = [dict(lead, **{"from": 0, "to": .56}), dict(second, **{"from": .48, "to": 1})]
-    comp, errs = validate({"slug": slug, "shots": shots}, char_ids, source)
+    comp, errs = validate({"slug": slug, "shots": shots}, char_ids, source, allow=allow)
     if errs:   # 极端情况（关键词全撞原文）：退到纯排版 + 窗光
         comp, _ = validate({"slug": "", "shots": [{"prim": "typeset", "from": 0, "to": .56, "params": {"words": ["此刻"], "mode": "assemble"}},
                                                     {"prim": "window", "from": .48, "to": 1, "params": {"from": "noon", "to": "dusk"}}]}, char_ids, "")

@@ -147,13 +147,26 @@ def word_related(word, text):
     return any(c in text for c in chars)
 
 
+# 通用意象：情绪 / 光线 / 时间 / 动作 / 距离类的字。画面词落在这些意象上就不算“凭空编”，
+# 即使原文没出现同一个字（相遇、晨光、笑意、靠近、沉默、对峙……）。
+IMAGERY_CHARS = set("光影明暗晨昏暮夜晴阴雨雪雾霜烛暖冷温凉寒静默"
+                    "笑泪哭怒惊怕慌羞烫跳息痛伤爱恨忧愁梦醒"
+                    "拥抱吻握牵触碰靠近远离距遇别逢回望等聚散追逃"
+                    "沉寂峙逼爆紧余隔缝隙裂碎")
+
+
+def word_imagery(word):
+    return any(c in IMAGERY_CHARS for c in word)
+
+
 def hero_word_issues(comp, scene_text):
+    """只拒明显无关：全部画面词既和场景原文没有共同实字，也不是情绪/光线/动作/时间类通用意象，才报错。"""
     ws = hero_words(comp)
     if not ws:
         return []
-    unrelated = [w for w in ws if not word_related(w, scene_text)]
+    unrelated = [w for w in ws if not word_related(w, scene_text) and not word_imagery(w)]
     if len(unrelated) == len(ws):
-        return [f"画面意象词 {unrelated[:4]} 与本场景原文完全无关：请从场景里真实出现的物件/动作/情绪里取词（可以变形，但别凭空编）"]
+        return [f"画面意象词 {unrelated[:4]} 与本场景明显无关：请从场景里的物件/动作/情绪/光线里取词（可以变形，但别凭空编）"]
     return []
 
 
@@ -291,7 +304,7 @@ def build_report(seg, plan, llm_stats=None, hero=None, html=None, verify=None, g
         "no_missing_text": bool(vb and vb["missing_count"] == 0) if vb else None,
         "plan_complete": len(plan.get("paras") or []) == n and sd.get("contiguous", False),
         "visuals_consistent_after_guard": not final_issues,
-        "heroes_render_ok": all(h.get("status") in ("ok", "fixed", "rule", "fallback") for h in plan.get("heroes") or []),
+        "heroes_render_ok": all(h.get("status") in ("ok", "fixed", "rule", "simple", "fallback") for h in plan.get("heroes") or []),
     }
     if verify is not None:
         floor["browser_verify"] = bool(verify.get("ok"))

@@ -154,7 +154,7 @@ if (mf) {
 const dev = $('#dev');
 if (dev) {
   const jid = dev.dataset.job, bid = dev.dataset.book; const t0 = parseFloat(dev.dataset.created) * 1000;
-  const STEP_OF = {queued: null, start: null, segment: 'segment', outline: 'plan', detail: 'plan', 'detail+': 'plan', plan: 'plan', cast: 'plan', chapters: 'plan', 'chapter+': 'plan', hero: 'plan', 'hero+': 'plan', render: 'render', verify: 'verify', shots: 'verify', done: 'done', failed: null};
+  const STEP_OF = {queued: null, start: null, segment: 'segment', outline: 'plan', detail: 'plan', 'detail+': 'plan', plan: 'plan', cast: 'plan', chapters: 'plan', 'chapter+': 'plan', hero: 'plan', 'hero-sel': 'plan', 'hero+': 'plan', render: 'render', verify: 'verify', shots: 'verify', done: 'done', failed: null};
   const ORDER = ['segment', 'plan', 'render', 'verify'];
   let endT = null, last = -1;
   const tc = $('#tc'); const tcSmall = tc.querySelector('small').outerHTML;

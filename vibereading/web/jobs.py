@@ -11,9 +11,32 @@ _sem = threading.BoundedSemaphore(MAX_CONCURRENT)
 # 进度页的四步：切分 → 规划 → 渲染 → 校验
 STEPS = [("segment", "切分", "Segment"), ("plan", "规划", "Plan"), ("render", "渲染", "Render"), ("verify", "校验", "Verify")]
 STAGE_STEP = {"segment": "segment", "engine": "plan", "outline": "plan", "detail": "plan", "detail+": "plan", "plan": "plan",
-              "cast": "plan", "chapters": "plan", "chapter+": "plan",
+              "cast": "plan", "chapters": "plan", "chapter+": "plan", "hero": "plan", "hero-sel": "plan", "hero+": "plan",
               "render": "render", "verify": "verify", "shots": "verify", "done": "done"}
-STAGE_PCT = {"segment": 6, "engine": 8, "outline": 10, "cast": 12, "chapters": 14, "detail": 30, "plan": 62, "hero": 64, "render": 80, "verify": 88, "shots": 95, "done": 100}
+STAGE_PCT = {"segment": 6, "engine": 8, "outline": 10, "cast": 12, "chapters": 14, "detail": 30, "plan": 62, "hero": 64, "render": 89, "verify": 92, "shots": 96, "done": 100}
+
+
+def advance(state, stage, msg):
+    """按进度消息推进 state['pct']（单调不减）。"""
+    if stage == "detail":
+        try: state["batches"] = int(msg.split("：")[1].split(" ")[0])
+        except Exception: pass
+    if stage == "detail+":
+        state["pct"] = min(58, state["pct"] + 28 / max(1, state["batches"]))
+    elif stage == "chapter+":   # "…（3/18）" → 14% + 已完成章节占比 × 48%
+        m = re.search(r"（(\d+)/(\d+)）", msg)
+        if m:
+            state["pct"] = max(state["pct"], 14 + 48 * int(m.group(1)) / max(1, int(m.group(2))))
+    elif stage == "hero-sel":   # 选场景 "（3/33 章）" → 64% + 占比 × 2%
+        m = re.search(r"（(\d+)/(\d+)", msg)
+        if m:
+            state["pct"] = max(state["pct"], 64 + 2 * int(m.group(1)) / max(1, int(m.group(2))))
+    elif stage == "hero+":   # 每个 hero 完成 "…（2/62）" → 66% + 已完成占比 × 22%（线性到 88%）
+        m = re.search(r"（(\d+)/(\d+)）", msg)
+        if m:
+            state["pct"] = max(state["pct"], 66 + 22 * int(m.group(1)) / max(1, int(m.group(2))))
+    elif stage in STAGE_PCT:
+        state["pct"] = max(state["pct"], STAGE_PCT[stage])
 
 
 def book_dir(book_id):
@@ -63,23 +86,9 @@ def _run(jid, book_id, kind, plan, model, verify, hero=None, hero_max=2):
           with lock:
             if stage != "done":
                 log.append(f"{time.time() - t0:05.1f}|{stage}|{msg}")
-            if stage == "detail":
-                try: state["batches"] = int(msg.split("：")[1].split(" ")[0])
-                except Exception: pass
-            if stage == "detail+":
-                state["pct"] = min(58, state["pct"] + 28 / max(1, state["batches"]))
-            elif stage == "chapter+":   # "…（3/18）" → 14% + 已完成章节占比 × 48%
-                m = re.search(r"（(\d+)/(\d+)）", msg)
-                if m:
-                    state["pct"] = max(state["pct"], 14 + 48 * int(m.group(1)) / max(1, int(m.group(2))))
-            elif stage == "hero+":   # "…（2/5）" → 64% + 已完成占比 × 14%
-                m = re.search(r"（(\d+)/(\d+)）", msg)
-                if m:
-                    state["pct"] = max(state["pct"], 64 + 14 * int(m.group(1)) / max(1, int(m.group(2))))
-            elif stage in STAGE_PCT:
-                state["pct"] = max(state["pct"], STAGE_PCT[stage])
+            advance(state, stage, msg)
             state["stage"] = stage
-            save(force=stage in ("segment", "plan", "render", "verify", "chapter+", "cast", "hero", "hero+"))
+            save(force=stage in ("segment", "plan", "render", "verify", "chapter+", "cast", "hero", "hero+", "hero-sel"))
 
         try:
             b = c.execute("SELECT * FROM books WHERE id=?", (book_id,)).fetchone()

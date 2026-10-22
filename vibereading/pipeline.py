@@ -37,7 +37,8 @@ def build(text, out_html, title=None, author=None, work=None, theme="paper", pla
         progress("plan", "使用外部分镜 JSON（跳过 LLM）")
         plan, warns = planner.validate_plan(src, seg)
         if src.get("heroes"):
-            plan["heroes"] = heromod.sanitize_heroes(src["heroes"], seg["count"], {c["id"] for c in plan["characters"]}, "".join(x["text"] for x in seg["segments"]))
+            plan["heroes"] = heromod.sanitize_heroes(src["heroes"], seg["count"], {c["id"] for c in plan["characters"]}, "".join(x["text"] for x in seg["segments"]),
+                                                        allow=heromod.HP.proper_nouns(plan, title))
         report["llm"] = {"provider": "external", "model": "plan.json", "calls": 0, "warnings": warns}
     else:
         if engine is None:

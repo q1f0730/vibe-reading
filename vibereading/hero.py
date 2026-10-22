@@ -69,7 +69,8 @@ function setTheme(t){if(t!==st.theme){st.theme=t;document.documentElement.setAtt
 addEventListener('message',function(e){
  if(e.source!==parent)return;var d=e.data||{};if(!d||!d.vrh)return;
  if(d.theme)setTheme(d.theme==='night'?'night':'paper');
- if(typeof d.p==='number'&&isFinite(d.p)){var p=clamp(d.p);if(p!==st.p||d.force){st.p=p;subs.forEach(function(f){call(f,p)})}}
+ chk();
+ if(typeof d.p==='number'&&isFinite(d.p)){got=1;var p=clamp(d.p);if(p!==st.p||d.force){st.p=p;subs.forEach(function(f){call(f,p)})}}
  if(d.t==='perf-start'){lt=[];perf={dts:[],last:performance.now(),on:true};(function f(now){if(!perf||!perf.on)return;perf.dts.push(now-perf.last);perf.last=now;requestAnimationFrame(f)})(performance.now())}
  if(d.t==='perf-stop'&&perf){perf.on=false;var a=perf.dts.slice(1).sort(function(x,y){return x-y});
   post({t:'perf',frames:a.length,p95:a.length?a[Math.floor(a.length*.95)]:0,max:a.length?a[a.length-1]:0,longtasks:lt.length,longtask_ms:Math.round(lt.reduce(function(s,x){return s+x},0)),longtask_max:Math.round(Math.max.apply(null,[0].concat(lt)))});perf=null}
@@ -77,7 +78,13 @@ addEventListener('message',function(e){
   post({t:'probe',sw:Math.max(de.scrollWidth,b?b.scrollWidth:0),iw:innerWidth,sh:de.scrollHeight,ih:innerHeight,nodes:document.getElementsByTagName('*').length})}
 });
 document.documentElement.setAttribute('data-theme','paper');
-addEventListener('load',function(){post({t:'ready'})});
+// 尺寸兜底：iframe 可能以 0×0 启动、长大后浏览器不补发 resize（Firefox / 进程隔离的沙箱 iframe）。
+// ResizeObserver 发现视口变了就补发一个 resize 事件，让模块按新尺寸重排。
+var lw=innerWidth,lh=innerHeight;function chk(){if(innerWidth!==lw||innerHeight!==lh){lw=innerWidth;lh=innerHeight;try{dispatchEvent(new Event('resize'))}catch(e){}}}
+try{new ResizeObserver(chk).observe(document.documentElement)}catch(e){}
+// 进度兜底：父页面的进度消息一直没到（消息被丢、宿主不支持）时，约 1.5 秒后显示终态画面，而不是停在开场/空白
+var got=0;
+addEventListener('load',function(){post({t:'ready'});setTimeout(function(){if(!got){got=1;st.p=1;subs.forEach(function(f){call(f,1)})}},1500)});
 })();"""
 
 

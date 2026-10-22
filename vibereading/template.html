@@ -429,14 +429,20 @@ function hsTick(force){
     let p = reduce || el.classList.contains('static') ? 1 : Math.min(1, Math.max(0, -r.top / Math.max(1, r.height - vh * 0.75)));
     if (!force && Math.abs(p - el._p) < 0.002 && el._th === th) return;
     el._p = p; el._th = th;
-    try { el._f.contentWindow.postMessage({vrh: 1, p, theme: th}, '*'); } catch(x){}
+    hsSend(el, p, th, force);
   });
 }
+// targetOrigin 必须是 '*'：沙箱 iframe 的 origin 是不透明的 'null'（file:// 打开时父页面也是 'null'），写具体 origin 消息会被丢
+function hsSend(el, p, th, force){ try { el._f.contentWindow.postMessage({vrh: 1, p, theme: th, force: !!force}, '*'); } catch(x){} }
 function wireHeroes(root){ root.querySelectorAll('.hs').forEach(el => { if (reduce) el.classList.add('static'); hsIO.observe(el); }); }
 addEventListener('message', e => {   // 模块只能报错/报告，不能操作父页面
   const d = e.data; if (!d || !d.vrh) return;
-  HS.forEach(el => { if (el._f && e.source === el._f.contentWindow && d.t === 'error') el.dataset.err = String(d.msg).slice(0, 120); });
+  HS.forEach(el => { if (!el._f || e.source !== el._f.contentWindow) return;
+    if (d.t === 'error') el.dataset.err = String(d.msg).slice(0, 120);
+    if (d.t === 'ready'){ el._p = -1; hsTick(true); }   // 模块就绪后立刻补发当前进度（iframe load 事件可能早于模块订阅）
+  });
 });
+addEventListener('resize', () => { clearTimeout(hsTick._rt); hsTick._rt = setTimeout(() => hsTick(true), 150); });
 addEventListener('scroll', () => requestAnimationFrame(() => hsTick(false)), {passive: true});
 addEventListener('resize', () => hsTick(true));
 new MutationObserver(() => hsTick(true)).observe(document.body, {attributes: true, attributeFilter: ['class']});

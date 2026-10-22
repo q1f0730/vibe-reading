@@ -121,6 +121,10 @@ def _run(jid, book_id, kind, plan, model, verify, hero=None, hero_max=2):
             if v is not None:
                 log.append(f"{time.time() - t0:05.1f}|verify|" + (f"原文 {v.get('matched')}/{v.get('segments')} 段逐字一致" if v.get("text_identical")
                                                                   else "校验未通过：" + json.dumps(v, ensure_ascii=False)[:300]))
+            hp = rep.get("hero_page_check")
+            if hp is not None:
+                log.append(f"{time.time() - t0:05.1f}|verify|" + (f"关键场景动画实测 {hp.get('checked')} 个（file:// · 0×0 启动 · 改窗口）全部正常" if hp.get("ok")
+                                                                  else "关键场景动画实测有问题：" + "；".join((hp.get("failures") or [hp.get("fatal", "")])[:3])[:300]))
             now = time.time()
             if kind == "rerender" and b["quality_json"]:
                 old = json.loads(b["quality_json"])     # 只重新渲染：模型相关的分数沿用上次规划的

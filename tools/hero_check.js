@@ -49,6 +49,23 @@ async function load(page, doc, w, h, bg){
   while (Date.now() - t0 < 8000){ if (await page.evaluate(() => MSGS.some(m => m.t === 'ready'))) return Date.now() - t0; await sleep(60); }
   return -1;
 }
+// 真实浏览器的恶劣条件（Firefox / Chrome 进程隔离的 iframe 常见）：iframe 刚创建时视口是 0×0，之后长到真实尺寸，
+// 但浏览器不一定补发 resize 事件。这里把 iframe 先放进 0×0 的容器，并在文档里屏蔽“浏览器原生的”resize 事件（isTrusted），
+// 再把容器撑开，看画面是否按真实尺寸重新布局（而不是全挤在左上角 / 空白）。
+const NO_NATIVE_RESIZE = "<script>(function(){var a=EventTarget.prototype.addEventListener;EventTarget.prototype.addEventListener=function(t,f,o){" +
+  "if(t==='resize'&&this===window&&typeof f==='function'){var g=f;f=function(e){if(e&&e.isTrusted)return;return g.apply(this,arguments)}}return a.call(this,t,f,o)};" +
+  "try{Object.defineProperty(window,'onresize',{set:function(){},get:function(){return null},configurable:true})}catch(e){}})()<\/script>";
+function hostileDoc(doc){ const i = doc.indexOf('<head>'); return i < 0 ? NO_NATIVE_RESIZE.replace('<\\/', '</') + doc : doc.slice(0, i + 6) + NO_NATIVE_RESIZE.replace('<\\/', '</') + doc.slice(i + 6); }
+async function hostileLoad(page, doc, w, h, bg){
+  await page.setContent(harness(w, h, bg), {waitUntil: 'load'});
+  await page.evaluate(() => { const wr = document.getElementById('wrap'); wr.style.width = '0px'; wr.style.height = '0px'; });
+  await page.evaluate(d => { document.getElementById('f').srcdoc = d; }, hostileDoc(doc));
+  const t0 = Date.now(); let ok = false;
+  while (Date.now() - t0 < 8000){ if (await page.evaluate(() => MSGS.some(m => m.t === 'ready'))){ ok = true; break; } await sleep(60); }
+  await page.evaluate((w, h) => { const wr = document.getElementById('wrap'); wr.style.width = w + 'px'; wr.style.height = h + 'px'; }, w, h);
+  await sleep(450);
+  return ok;
+}
 async function frame(page, p, theme, wait = 260){
   await page.evaluate((p, theme) => send({p, theme, force: true}), p, theme);
   await sleep(wait);
@@ -101,6 +118,26 @@ async function checkOne(b, mod, fast){
       }
       if (!fast) fr.n5 = await frame(page, 0.5, 'night', W);
       fr.n1 = await frame(page, 1, 'night', W);
+    }
+    // ---- 恶劣条件 1：iframe 以 0×0 启动、浏览器不补发 resize（用户真实浏览器里出现过：元素全挤在左上角）
+    if (t >= 0 && fr.p1){
+      if (await hostileLoad(page, mod.doc, 820, 560, '#faf9f7')){
+        fr.h1 = await frame(page, 1, 'paper', W);
+        const pr = await probe(page); m.hostile = {iw: pr && pr.iw, ih: pr && pr.ih, changed_vs_normal: +changed(fr.p1.sig, fr.h1.sig).toFixed(4)};
+        // 变化面积超过 6%，或超过画面主体面积的一半（小主体整个挪了位置也算）
+        const moved = (a, b, c) => c > 0.06 || (c > 0.004 && c > 0.5 * Math.max(a.nonblank, b.nonblank));
+        if (moved(fr.p1, fr.h1, m.hostile.changed_vs_normal)) errors.push(`iframe 以 0×0 启动、之后才长到真实尺寸时画面没有重新布局（和正常加载相比 ${(m.hostile.changed_vs_normal * 100).toFixed(1)}% 的画面不同）：尺寸为 0 时要延迟初始化，并用 ResizeObserver 监听尺寸变化`);
+      } else errors.push('iframe 以 0×0 启动时模块没有加载完成');
+      // ---- 恶劣条件 2：父页面的进度消息一直没到（file:// 打开、消息被丢）→ 至少要显示终态画面，不能空白
+      if (await load(page, mod.doc, 820, 560, '#faf9f7') >= 0){
+        await sleep(2300); const el = await page.$('#f');
+        fr.q = await page.evaluate(b => analyze(b), await el.screenshot({encoding: 'base64'}));
+        for (let k = 0; k < 2 && (fr.q.nonblank < LIMITS.nonblank_mid || changed(fr.p1.sig, fr.q.sig) > 0.06); k++){   // 慢机器：再等等重截
+          await sleep(900); fr.q = await page.evaluate(b => analyze(b), await el.screenshot({encoding: 'base64'})); }
+        m.no_progress = {nonblank: +fr.q.nonblank.toFixed(4), changed_vs_final: +changed(fr.p1.sig, fr.q.sig).toFixed(4)};
+        const c = m.no_progress.changed_vs_final;
+        if (fr.q.nonblank < LIMITS.nonblank_mid || c > 0.06 || (c > 0.004 && c > 0.5 * Math.max(fr.p1.nonblank, fr.q.nonblank))) errors.push('收不到父页面的进度消息时没有显示终态画面（应在约 1.5 秒后自行兜底到 p=1）');
+      }
     }
     // ---- mobile
     await page.setViewport({width: 390, height: 844, deviceScaleFactor: 1});

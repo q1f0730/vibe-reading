@@ -453,12 +453,21 @@ function mount(comp){
   el('div', 'vvig', root);
   var slug = el('div', 'vslug', root), sl = el('span', '', slug), tc = el('span', '', slug);
   sl.innerHTML = '<b>FIG.' + ('0' + (comp.fig || 1)).slice(-2) + '</b>\u2002' + String(comp.slug || '').replace(/[<>&]/g, '');
-  var seconds = +comp.seconds || 12, inst = [], lastP = 0, W = 0, H = 0;
+  var seconds = +comp.seconds || 12, inst = [], lastP = 0, W = 0, H = 0, built = false, rt = 0;
+  // 真实浏览器里 iframe 刚创建时视口可能是 0×0（Firefox、Chrome 进程隔离的沙箱 iframe），之后长到真实尺寸却不一定补发 resize。
+  // 所以：尺寸为 0 时不建（延迟到有尺寸）；ResizeObserver + resize + 每次进度消息都核对尺寸，变了就按新尺寸重建。
+  function size(){ var de = document.documentElement;
+    return [M.round(innerWidth || de.clientWidth || root.clientWidth || 0), M.round(innerHeight || de.clientHeight || root.clientHeight || 0)]; }
+  function stale(){ var s = size(); return s[0] >= 2 && s[1] >= 2 && (!built || M.abs(s[0] - W) > 1 || M.abs(s[1] - H) > 1); }
   function build(){
-    inst.forEach(function(s){ s.L.remove(); }); inst = []; W = innerWidth; H = innerHeight;
+    var s = size(); if (s[0] < 2 || s[1] < 2) return false;
+    inst.forEach(function(sh){ sh.L.remove(); }); inst = []; W = s[0]; H = s[1]; built = true;
+    root.setAttribute('data-w', W); root.setAttribute('data-h', H);
     shots.forEach(function(s, i){ var L = el('div', 'vl'); root.insertBefore(L, grain); L.style.zIndex = i + 1;
       var C = {W: W, H: H, mob: W < 560, idx: i, seed: hash((s.prim || '') + i + JSON.stringify(s.params || {})), data: comp.data || {}, chars: comp.chars || []};
       var api = null; try { api = P[s.prim](L, s.params || {}, C); } catch (e){ setTimeout(function(){ throw e; }); }
+      // 顶层 svg 带上 viewBox：在下一次重建之前尺寸再变，也是整体缩放而不是错位
+      Array.prototype.forEach.call(L.querySelectorAll('svg'), function(g){ if (!g.getAttribute('viewBox') && !(g.parentNode && g.parentNode.closest && g.parentNode.closest('svg'))) g.setAttribute('viewBox', '0 0 ' + W + ' ' + H); });
       inst.push({s: s, L: L, api: api || {update: function(){}}, from: clamp(+s.from || 0), to: clamp(s.to == null ? 1 : +s.to)}); });
     // 转场：相邻镜头的重叠区做“先出后进”的交叉（前一镜在重叠区前 60% 淡出，后一镜在后 60% 淡入），没有重叠就在边界 ±0.02 做短交叉
     var ord = inst.slice().sort(function(a, b){ return a.from - b.from; });
@@ -466,6 +475,7 @@ function mount(comp){
       if (sh.from <= .001) sh.fi = null; else { var a0 = prev ? M.min(sh.from, prev.to) : sh.from, b0 = prev ? M.max(sh.from, prev.to) : sh.from; if (b0 - a0 < .04){ var c = (a0 + b0) / 2; a0 = c - .02; b0 = c + .02; } sh.fi = [a0 + (b0 - a0) * .4, b0]; }
       if (sh.to >= .999) sh.fo = null; else { var a1 = next ? M.min(sh.to, next.from) : sh.to, b1 = next ? M.max(sh.to, next.from) : sh.to; if (b1 - a1 < .04){ var c2 = (a1 + b1) / 2; a1 = c2 - .02; b1 = c2 + .02; } sh.fo = [a1, a1 + (b1 - a1) * .6]; } });
     render(lastP, true);
+    return true;
   }
   function env(sh, p){ var vin = sh.fi ? es(seg(p, sh.fi[0], sh.fi[1])) : 1, vout = sh.fo ? 1 - es(seg(p, sh.fo[0], sh.fo[1])) : 1; return vin * vout; }
   function render(p, force){
@@ -477,10 +487,14 @@ function mount(comp){
     var q = M.floor(p * 48); grain.style.transform = 'translate(' + ((q * 37) % 64) + 'px,' + ((q * 53) % 64) + 'px)';
     var fr = M.round(p * seconds * 24), s = M.floor(fr / 24); tc.textContent = '00:00:' + ('0' + s).slice(-2) + ':' + ('0' + fr % 24).slice(-2);
   }
+  function relayout(){ clearTimeout(rt); if (!stale()) return; if (!built) build(); else rt = setTimeout(function(){ if (stale()) build(); }, 90); }
   build();
-  VRH.onProgress(function(p){ render(p); });
+  VRH.onProgress(function(p){ if (stale()) build(); render(p); });
   VRH.onTheme(function(){ inst.forEach(function(sh){ if (sh.api.theme) try { sh.api.theme(); } catch (e){} }); render(lastP, true); });
-  var rt = 0; addEventListener('resize', function(){ clearTimeout(rt); rt = setTimeout(function(){ if (innerWidth !== W || innerHeight !== H) build(); }, 120); });
+  addEventListener('resize', relayout);
+  try { new ResizeObserver(relayout).observe(root); } catch (e){}
+  // 兜底轮询：没有 ResizeObserver、也没有 resize 事件的环境里，尺寸未知期间每 150ms 看一次（建成后停）
+  (function poll(n){ if (built || n > 200) return; setTimeout(function(){ if (stale()) build(); poll(n + 1); }, 150); })(0);
 }
 window.VRP = {mount: mount, prims: PRIMS};
 })();

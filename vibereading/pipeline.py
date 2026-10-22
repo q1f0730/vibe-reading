@@ -84,6 +84,15 @@ def build(text, out_html, title=None, author=None, work=None, theme="paper", pla
             report["verify"] = json.loads(r.stdout.strip().splitlines()[-1])
         except Exception:
             report["verify"] = {"ok": False, "raw": (r.stdout + r.stderr)[-2000:]}
+    if verify and any(h.get("comp") or h.get("module") for h in plan.get("heroes") or []):
+        # 关键场景动画按真实浏览器条件实测：file:// 打开、懒加载、非 1280 窗口、DPR 1.5、iframe 以 0×0 启动且不补发 resize、中途改窗口
+        progress("verify", "关键场景动画：真实浏览器条件实测（file:// / 懒加载 / 0×0 启动 / 改窗口）")
+        try:
+            r = subprocess.run(["node", str(TOOLS / "page_hero_check.js"), str(out_html.resolve()), "--max", "6"],
+                               capture_output=True, text=True, timeout=300)
+            report["hero_page_check"] = json.loads(r.stdout.strip().splitlines()[-1])
+        except Exception as e:
+            report["hero_page_check"] = {"ok": False, "fatal": str(e)[:300]}
     if shots:
         progress("shots", "截图")
         sd = out_html.parent / "screenshots" / out_html.stem

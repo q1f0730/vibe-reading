@@ -688,7 +688,7 @@ def run_prims(seg, plan, jobs, chars, hs, progress=lambda *a: None):
         return HP.page_payload(comp, e["_fig"], float(e["seconds"]), chars, e["_data"])
 
     # round 1: browser check of first attempts
-    res = _check_comps({k: payload(k, c) for k, c in P.items()}, chars, hs)
+    res = _check_comps({k: payload(k, c) for k, c in P.items()}, chars, hs) if P else {}
     for k, errs in res.items():
         if errs:
             E[k]["errors"].append(errs[:8]); E[k]["_need_fix"] = True; P.pop(k)
@@ -715,7 +715,7 @@ def run_prims(seg, plan, jobs, chars, hs, progress=lambda *a: None):
         except Exception as ex:
             e["errors"].append([f"{type(ex).__name__}: {str(ex)[:200]}"]); e["_rule"] = True
         e["_t"] += time.time() - t0
-    res = _check_comps({k: payload(k, c) for k, c in fixed.items()}, chars, hs)
+    res = _check_comps({k: payload(k, c) for k, c in fixed.items()}, chars, hs) if fixed else {}
     for k, errs in res.items():
         if errs:
             E[k]["errors"].append(errs[:8]); E[k]["_rule"] = True
@@ -729,7 +729,7 @@ def run_prims(seg, plan, jobs, chars, hs, progress=lambda *a: None):
         others = [x for k2, e2 in E.items() if k2 != hid and e2["_ch"] == e["_ch"] and (e2.get("comp") or k2 in rules)
                   for x in (y["prim"] for y in (e2.get("comp") or rules.get(k2))["shots"])]
         rules[hid] = HP.rule_compose(dict(e["desc"], title=e["title"]), char_ids, source, others)
-    res = _check_comps({k: payload(k, c) for k, c in rules.items()}, chars, hs)
+    res = _check_comps({k: payload(k, c) for k, c in rules.items()}, chars, hs) if rules else {}
     for k, errs in res.items():
         if errs:
             E[k]["errors"].append(["rule: " + x for x in errs[:6]]); hs.fallback += 1

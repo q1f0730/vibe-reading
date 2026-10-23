@@ -64,14 +64,14 @@ if (go) {
     r.onload = () => { try { plan = JSON.parse(r.result); $('#pname').textContent = f.name; $('#pdrop').classList.add('has'); $('#err').textContent = ''; }
       catch (x) { plan = null; $('#pname').textContent = '不是合法 JSON'; } upd(); }; r.readAsText(f); };
   go.onclick = async () => {
-    go.disabled = true; $('#err').textContent = '';
+    go.disabled = true; go.classList.add('sending'); $('#err').textContent = '';
     const m = modeVal();
     try {
       await startBuild({name: fname, text, title: $('#title').value || $('#title').placeholder.replace(/^留空则用文件名$/, '') || fname,
         author: $('#author').value, model: m === 'plan' ? null : m, plan: m === 'plan' ? plan : null,
         verify: $('#verify').checked, theme: $('#night').checked ? 'night' : 'paper',
         hero: m !== 'plan' && $('#hero').checked, hero_max: +$('#heroMax').value});
-    } catch (x) { $('#err').textContent = x.status === 401 ? '登录已过期，请重新登录' : x.message; go.disabled = false; }
+    } catch (x) { $('#err').textContent = x.status === 401 ? '登录已过期，请重新登录' : x.message; go.disabled = false; go.classList.remove('sending'); }
   };
   upd();
 }
@@ -119,8 +119,11 @@ if (books) {
   if ($$('.stamp.running,.stamp.queued', books).length) setTimeout(() => location.reload(), 4000);
 }
 const da = $('#delacct');
-if (da) da.onsubmit = async e => { e.preventDefault(); if (!confirm('永久删除账号和书架上的全部书？')) return;
-  try { await api('DELETE', '/api/me', {password: $('#delpw').value}); location.href = '/'; } catch (x) { $('#delerr').textContent = x.message; } };
+if (da) da.onsubmit = async e => { e.preventDefault(); const slid = da._slid; da._slid = false; const sl = $('[data-slide]', da);
+  // the slide-to-confirm gesture is the confirmation; a plain Enter in the password field still asks
+  if (!slid && !confirm('永久删除账号和书架上的全部书？')) return;
+  if (!$('#delpw').value) { $('#delerr').textContent = '先输入密码'; if (sl && sl._reset) sl._reset(); return; }
+  try { await api('DELETE', '/api/me', {password: $('#delpw').value}); location.href = '/'; } catch (x) { $('#delerr').textContent = x.message; if (sl && sl._reset) sl._reset(); } };
 
 // ---------------- model settings ----------------
 const mf = $('#mform');
@@ -202,5 +205,160 @@ if (dev) {
   const poll = async () => { try { const j = await api('GET', '/api/jobs/' + jid); if (render(j)) return; } catch (x) { if (x.status === 403 || x.status === 404) { $('#result').innerHTML = `<h3>看不到这个任务</h3><p class="wait">${esc(x.message)}</p>`; return; } }
     setTimeout(poll, 900); };
   poll();
+}
+})();
+
+// =====================================================================
+// ui-rewamp · interaction layer. Design inspired by Rewamp UI (rewampui.com); this code is written for VibeReading
+// (vanilla JS, no dependencies) and copies no Rewamp UI source. Every effect is skipped under prefers-reduced-motion.
+// =====================================================================
+(() => {
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const root = document.documentElement;
+
+// ---- paper / ink theme switch (theme-toggle) ----
+const sw = $$('[data-theme-toggle]');
+const paint = () => { const dark = root.getAttribute('data-theme') === 'dark';
+  sw.forEach(b => { b.setAttribute('aria-checked', dark ? 'true' : 'false'); b.setAttribute('aria-label', dark ? '切换到纸（浅色）主题' : '切换到墨（深色）主题'); });
+  const m = $('meta[name="color-scheme"]'); if (m && !m.hasAttribute('data-fixed')) m.setAttribute('content', dark ? 'dark' : 'light'); };
+paint();
+sw.forEach(b => b.addEventListener('click', () => {
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next); try { localStorage.setItem('vr:theme', next); } catch (e) {} paint();
+}));
+
+// ---- split-text reveal (characters) + word-by-word reveal ----
+function wrapText(node, unit, state) {
+  [...node.childNodes].forEach(n => {
+    if (n.nodeType === 3) {
+      const parts = unit === 'w' ? n.textContent.split(/(\s+)/) : [...n.textContent];
+      const frag = document.createDocumentFragment();
+      parts.forEach(p => {
+        if (!p) return;
+        if (/^\s+$/.test(p)) { frag.appendChild(document.createTextNode(p)); return; }
+        const s = document.createElement('span'); s.className = unit; s.textContent = p; s.setAttribute('aria-hidden', 'true');
+        const i = state.i++; s.style.setProperty('--i', i);
+        if (unit === 'ch') { const sg = i % 2 ? 1 : -1; s.style.setProperty('--y', (sg * (22 + (i * 37 % 30))) + 'px'); s.style.setProperty('--r', (sg * (4 + (i * 53 % 9))) + 'deg'); }
+        frag.appendChild(s);
+      });
+      n.replaceWith(frag);
+    } else if (n.nodeType === 1 && n.tagName !== 'BR' && !(unit === 'ch' && n.hasAttribute('data-words'))) wrapText(n, unit, state);
+  });
+}
+if (!reduce) $$('[data-split]').forEach(el => {
+  el.setAttribute('aria-label', el.textContent.replace(/\s+/g, ' ').trim());
+  wrapText(el, 'ch', {i: 0}); $$('[data-words]', el).forEach(w => wrapText(w, 'w', {i: 0}));
+  el.classList.add('js-split');
+});
+
+// ---- film-edge marquee speeds up with scroll velocity (velocity-marquee-text) ----
+const edge = $('.edge-track');
+if (edge && !reduce && edge.getAnimations) {
+  let lastY = scrollY, boost = 0, raf = 0;
+  const anim = () => edge.getAnimations()[0];
+  const loop = () => { boost *= 0.92; const a = anim(); if (a) a.playbackRate = 1 + boost; raf = boost > 0.02 ? requestAnimationFrame(loop) : 0; if (!raf && a) a.playbackRate = 1; };
+  addEventListener('scroll', () => { const v = Math.abs(scrollY - lastY); lastY = scrollY; boost = Math.min(14, boost + v * 0.08); if (!raf) raf = requestAnimationFrame(loop); }, {passive: true});
+}
+
+// ---- sliding ink indicator for tab rows (morphing-tab-navbar) ----
+$$('[data-morph]').forEach(row => {
+  const ink = $('.tab-ink', row); if (!ink) return;
+  const items = $$(':scope > a, :scope > button', row);
+  const current = () => items.find(t => t.getAttribute('aria-current') === 'page' || t.getAttribute('aria-selected') === 'true' || t.getAttribute('aria-checked') === 'true');
+  const move = (t, instant) => { if (!t) return; if (instant) ink.style.transition = 'none';
+    ink.style.setProperty('--tx', t.offsetLeft + 'px'); ink.style.setProperty('--tw', t.offsetWidth + 'px');
+    if (instant) { ink.offsetWidth; ink.style.transition = ''; } };
+  // auth tabs: start from the tab the user came from, then glide to the current one
+  let from = null; try { from = sessionStorage.getItem('vr:tabfrom'); sessionStorage.removeItem('vr:tabfrom'); } catch (e) {}
+  const start = from && items.find(t => t.dataset.tab === from);
+  move(start || current(), true); row.classList.add('ready');
+  if (start) requestAnimationFrame(() => requestAnimationFrame(() => move(current())));
+  items.forEach(t => {
+    t.addEventListener('mouseenter', () => move(t)); t.addEventListener('focus', () => move(t));
+    if (t.dataset.tab) t.addEventListener('click', () => { const c = current(); try { if (c) sessionStorage.setItem('vr:tabfrom', c.dataset.tab); } catch (e) {} });
+  });
+  row.addEventListener('mouseleave', () => move(current()));
+  row.addEventListener('focusout', e => { if (!row.contains(e.relatedTarget)) move(current()); });
+  row._move = move; row._current = current;
+  addEventListener('resize', () => move(current(), true));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => move(current(), true));
+});
+
+// ---- settings: interface-type segmented control drives the (visually hidden) <select> ----
+$$('.kseg').forEach(row => {
+  const sel = document.getElementById(row.dataset.for); if (!sel) return;
+  const btns = $$('button[data-val]', row);
+  const set = v => { btns.forEach(b => b.setAttribute('aria-checked', b.dataset.val === v ? 'true' : 'false')); if (row._move) row._move(row._current()); };
+  btns.forEach(b => b.addEventListener('click', () => { sel.value = b.dataset.val; sel.dispatchEvent(new Event('change', {bubbles: true})); set(b.dataset.val); }));
+  row.addEventListener('keydown', e => { const i = btns.findIndex(b => b.getAttribute('aria-checked') === 'true');
+    const d = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0; if (!d) return;
+    e.preventDefault(); const n = btns[(i + d + btns.length) % btns.length]; n.focus(); n.click(); });
+  sel.addEventListener('change', () => set(sel.value));
+  btns.forEach(b => b.tabIndex = b.getAttribute('aria-checked') === 'true' ? 0 : -1);
+});
+
+// ---- shelf: status filter + search capsule ----
+const books = $('#books');
+if (books) {
+  const q = $('#shelfq'), seg = $('.shelf-tools .seg'); let f = 'all';
+  const apply = () => { const s = (q && q.value || '').trim().toLowerCase(); let shown = 0;
+    $$('.book', books).forEach(c => { const st = c.dataset.status;
+      const okF = f === 'all' || (f === 'busy' ? (st === 'running' || st === 'queued') : st === f);
+      const txt = (($('h3', c) || {}).textContent + ' ' + (($('.by', c) || {}).textContent || '')).toLowerCase();
+      const ok = okF && (!s || txt.includes(s)); c.hidden = !ok; if (ok) shown++; });
+    const nr = $('#nores'); if (nr) nr.classList.toggle('hide', shown > 0); };
+  if (seg) $$('button[data-filter]', seg).forEach(b => b.addEventListener('click', () => {
+    f = b.dataset.filter; $$('button[data-filter]', seg).forEach(x => x.setAttribute('aria-selected', x === b ? 'true' : 'false'));
+    if (seg._move) seg._move(b); apply(); }));
+  if (q) { q.addEventListener('input', apply);
+    const cap = q.closest('.capsule');
+    cap.addEventListener('pointerdown', e => { if (reduce) return; const r = cap.getBoundingClientRect(); const d = document.createElement('span'); d.className = 'ripple';
+      d.style.left = (e.clientX - r.left) + 'px'; d.style.top = (e.clientY - r.top) + 'px'; cap.appendChild(d); setTimeout(() => d.remove(), 650); }); }
+  // folder card: pointer-following paper sheen + stamp parallax
+  if (!reduce && matchMedia('(hover: hover)').matches) books.addEventListener('pointermove', e => {
+    const c = e.target.closest('.book'); if (!c) return; const r = c.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+    c.style.setProperty('--mx', (x * 100) + '%'); c.style.setProperty('--my', (y * 100) + '%');
+    c.style.setProperty('--mxn', ((x - .5) * 2).toFixed(2)); c.style.setProperty('--myn', ((y - .5) * 2).toFixed(2)); });
+}
+
+// ---- slide to confirm (irreversible actions) ----
+$$('[data-slide]').forEach(sl => {
+  const knob = $('.slide-knob', sl), form = sl.closest('form'); let x0 = 0, dragging = false, done = false;
+  const max = () => sl.clientWidth - knob.offsetWidth;
+  const setX = x => sl.style.setProperty('--x', Math.max(0, Math.min(max(), x)) + 'px');
+  const finish = () => { if (done) return; done = true; sl.classList.add('spring', 'done'); setX(max());
+    setTimeout(() => { form._slid = true; if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event('submit', {cancelable: true})); }, reduce ? 0 : 380); };
+  const reset = () => { done = false; sl.classList.add('spring'); sl.classList.remove('done'); setX(0); };
+  sl._reset = reset;
+  knob.addEventListener('pointerdown', e => { if (done) return; dragging = true; sl.classList.remove('spring'); x0 = e.clientX - (parseFloat(sl.style.getPropertyValue('--x')) || 0); knob.setPointerCapture(e.pointerId); });
+  knob.addEventListener('pointermove', e => { if (dragging) setX(e.clientX - x0); });
+  const up = () => { if (!dragging) return; dragging = false; (parseFloat(sl.style.getPropertyValue('--x')) || 0) >= max() * 0.9 ? finish() : reset(); };
+  knob.addEventListener('pointerup', up); knob.addEventListener('pointercancel', up);
+  knob.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); finish(); } });
+});
+
+// ---- darkroom: scramble-decoded step states + typewriter for the newest log line ----
+const dev = $('#dev');
+if (dev) {
+  const GL = '░▒▓█01ABCDEFXYZ#%&@';
+  const scramble = (el, text, done) => { if (reduce) { el.textContent = text; done && done(); return; } cancelAnimationFrame(el._raf); let k = 0; const N = text.length * 3 + 6;
+    const step = () => { el.textContent = [...text].map((c, i) => i < (k - 6) / 3 ? c : (c === ' ' ? ' ' : GL[(Math.random() * GL.length) | 0])).join('');
+      if (k++ < N) el._raf = requestAnimationFrame(step); else { el.textContent = text; done && done(); } };
+    step(); };
+  const watch = (el, cb) => new MutationObserver(cb).observe(el, {childList: true, characterData: true, subtree: true});
+  // step labels: app.js core writes .state text; re-run it through the decoder whenever it changes
+  $$('.steps .state', dev).forEach(el => { let shown = el.textContent; watch(el, () => { const t = el.textContent;
+    if (el._busy || t === shown) return; shown = t; el._busy = true; scramble(el, t, () => setTimeout(() => { el._busy = false; }, 0)); }); });
+  const res = $('#result');
+  if (res) watch(res, () => { const h = $('h3', res); if (!h || h._done) return; h._done = true; const t = h.firstChild;
+    if (t && t.nodeType === 3) { const s = document.createElement('span'); s.className = 'scr-h'; t.replaceWith(s); scramble(s, t.textContent); } });
+  const con = $('#console'); let seen = -1;
+  if (con && !reduce) watch(con, () => { const lines = $$('.ln', con); if (lines.length === seen) return;
+    const first = seen < 0; seen = lines.length; if (first || !lines.length) return;
+    const m = $('.m', lines[lines.length - 1]); if (!m || m._typed) return; m._typed = true; const full = m.textContent; const ln = m.parentElement;
+    ln.classList.add('typing'); m.textContent = ''; let i = 0; const per = Math.max(6, Math.min(28, 700 / Math.max(1, full.length)));
+    const t = setInterval(() => { i += 1; if (!m.isConnected) return clearInterval(t); m.textContent = full.slice(0, i); if (i >= full.length) { clearInterval(t); ln.classList.remove('typing'); } }, per); });
 }
 })();

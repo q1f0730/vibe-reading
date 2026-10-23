@@ -66,6 +66,23 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .toc li.cur a{color:var(--text);box-shadow:inset 3px 0 0 var(--accent)}
 .toc li a em{font-style:normal;color:var(--accent);font-family:var(--font-display)}
 .toc li.chap{padding:16px 22px 4px;font-size:12px;letter-spacing:.3em;color:var(--text2)}
+/* toc as a kinetic lens (design inspired by Rewamp UI kinetic-lens-sidebar; own code): the current scene leads with an em dash and
+   reads in full ink, neighbours recede by distance; hovering the list brings everything back. */
+.toc li{transition:opacity .35s var(--ease)}
+.toc li a{transition:background .2s,color .2s,padding .35s var(--ease)}
+.toc ol:has(li.cur:not(.chap)) li:not(.chap){opacity:.56}
+.toc ol li.cur:not(.chap),.toc ol li:not(.chap):has(+ li.cur:not(.chap)),.toc ol li.cur:not(.chap) + li:not(.chap){opacity:1}
+.toc ol li:not(.chap):has(+ li.cur:not(.chap)),.toc ol li.cur:not(.chap) + li:not(.chap){opacity:.78}
+.toc ol li:not(.chap):has(+ li + li.cur:not(.chap)),.toc ol li.cur:not(.chap) + li + li:not(.chap){opacity:.64}
+.toc li.cur:not(.chap) a{padding-left:28px;font-weight:600;font-size:15px}
+.toc li.cur:not(.chap) a em::before{content:"— ";color:var(--accent)}
+.toc ol:hover li{opacity:1!important}
+/* theme switch (design inspired by Rewamp UI theme-toggle; own code): knob slides, glyph cross-fades */
+.tools #bTheme{display:inline-flex;align-items:center;gap:8px;padding:0 8px 0 12px}
+.tools #bTheme .sw{position:relative;width:30px;height:16px;border-radius:8px;border:1px solid var(--rule);background:var(--bg2);flex:none}
+.tools #bTheme .sw::after{content:"";position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--text2);
+  transition:transform .45s cubic-bezier(.34,1.56,.64,1),background .3s}
+.tools #bTheme[aria-pressed="true"] .sw::after{transform:translateX(14px);background:var(--accent)}
 .scrim{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .4s}
 .scrim.on{opacity:1;pointer-events:auto}
 .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,calc(100% + 60px));visibility:hidden;z-index:95;background:var(--text);color:var(--bg);
@@ -284,6 +301,7 @@ h2.line{font-family:var(--font-display);font-size:calc(1.9rem*var(--fs));letter-
 .flash{animation:flash 2s var(--ease)}@keyframes flash{0%,30%{background:color-mix(in srgb,var(--accent) 14%,transparent)}100%{background:transparent}}
 
 /* ===================== RESPONSIVE ===================== */
+@media (prefers-reduced-motion:reduce){.toc li,.toc li a,.tools #bTheme .sw::after{transition:none}}
 @media (max-width:1099px){
   .rail{display:none}.tools{display:none}
   .topbar{display:flex;position:fixed;left:0;right:0;top:0;height:50px;z-index:60;align-items:center;gap:8px;padding:0 6px 0 4px;
@@ -339,7 +357,7 @@ h2.line{font-family:var(--font-display);font-size:calc(1.9rem*var(--fs));letter-
 <div class="ov ov-press" id="ovPress"></div>
 <div class="tools" role="toolbar" aria-label="阅读设置">
   <button id="bToc" aria-label="目录">目录</button>
-  <button id="bTheme" aria-pressed="false" aria-label="夜间主题">夜间</button>
+  <button id="bTheme" aria-pressed="false" aria-label="夜间主题">夜间<span class="sw" aria-hidden="true"></span></button>
   <button id="bSp" aria-pressed="true" aria-label="显示说话人标记">说话人</button>
 </div>
 <div class="topbar" id="topbar">
@@ -378,7 +396,9 @@ setSp(store.get('sp', true)); $('#bSp').onclick = () => setSp(document.body.clas
 
 /* ---------- toc ---------- */
 const toc = $('#toc'), scrim = $('#scrim');
-function openToc(o){ toc.classList.toggle('open', o); scrim.classList.toggle('on', o); }
+function openToc(o){ toc.classList.toggle('open', o); scrim.classList.toggle('on', o);
+  if (o){ const c = toc.querySelector('li.cur:not(.chap)'), ol = toc.querySelector('ol');
+    if (c && ol) ol.scrollTo({top: c.offsetTop - ol.offsetTop - ol.clientHeight / 2 + c.offsetHeight / 2, behavior: reduce ? 'auto' : 'smooth'}); } }
 $('#bToc').onclick = $('#mToc').onclick = () => openToc(true); scrim.onclick = () => openToc(false);
 addEventListener('keydown', e => { if (e.key === 'Escape') openToc(false); });
 $('#toc').addEventListener('click', e => { if (e.target.closest('a')) openToc(false); });

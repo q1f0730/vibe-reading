@@ -7,6 +7,15 @@ from .jobs import STEPS
 ASSET_V = str(int(time.time()))
 
 
+# 墨线下划线：pathLength=1，CSS 用 stroke-dashoffset 1→0 画出来（Rewamp UI liquid-underline-navbar 的思路，自写）
+SQUIG = '<svg class="squig" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path pathLength="1" d="M1,5 Q25,1 50,5 T99,5"/></svg>'
+# 纸 / 墨 主题开关（Rewamp UI theme-toggle 的滑块 + 图标交叉淡入，自写；状态由 /static/theme.js 与 app.js 维护）
+THEME_SWITCH = ('<button type="button" class="themesw" role="switch" aria-checked="false" aria-label="夜间主题（墨）" title="纸 / 墨" data-theme-toggle>'
+                '<span class="trk" aria-hidden="true"><span class="g g-l">纸</span><span class="g g-r">墨</span>'
+                '<span class="knob"><svg class="ic sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>'
+                '<svg class="ic moon" viewBox="0 0 16 16"><path d="M12.6 10.2A5.2 5.2 0 0 1 5.8 3.4a5.2 5.2 0 1 0 6.8 6.8z"/></svg></span></span></button>')
+
+
 def esc(s):
     return escape("" if s is None else str(s), quote=True)
 
@@ -30,27 +39,36 @@ def issue_no():
 def layout(title, body, user=None, current="", dark=False, desc="把任意小说 txt 变成一页滚动驱动的代码图文阅读器。原文逐字保留，AI 只负责分镜。"):
     today = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).strftime("%Y.%m.%d")
     def cur(k): return ' aria-current="page"' if current == k else ""
+    def a(href, label, k="", cls=""):
+        """导航链接 + 墨线下划线（设计参考 Rewamp UI liquid-underline-navbar，自行实现）。"""
+        c = f' class="{cls}"' if cls else ""
+        return f'<a href="{href}"{cur(k) if k else ""}{c}><span>{label}</span>{SQUIG}</a>'
     if user:
-        nav = (f'<a href="/#sample"{cur("sample")} class="hide-s">示例</a><a href="/shelf"{cur("shelf")}>书架</a>'
-               f'<a href="/#upload" class="hide-s">新建</a><a href="/settings"{cur("settings")}>模型</a><span class="who" title="{esc(user["username"])}">@{esc(user["username"])}</span>'
-               f'<button type="button" data-logout>退出</button>')
+        nav = (a("/#sample", "示例", "sample", "hide-s") + a("/shelf", "书架", "shelf") + a("/#upload", "新建", "", "hide-s") + a("/settings", "模型", "settings")
+               + f'<span class="who" title="{esc(user["username"])}">@{esc(user["username"])}</span>'
+               f'<button type="button" data-logout><span>退出</span>{SQUIG}</button>')
     else:
-        nav = (f'<a href="/sample/kongyiji"{cur("sample")}>示例</a><a href="/login"{cur("login")}>登录</a>'
-               f'<a href="/register" class="cta"{cur("register")}>注册</a>')
+        nav = (a("/sample/kongyiji", "示例", "sample") + a("/login", "登录", "login")
+               + f'<a href="/register" class="cta"{cur("register")}>注册</a>')
     return f"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="{'dark' if dark else 'light'}">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="{'dark' if dark else 'light'}"{' data-fixed' if dark else ''}>
+<script src="/static/theme.js?v={ASSET_V}"></script>
 <meta name="description" content="{esc(desc)}"><title>{esc(title)}</title>
 <link rel="stylesheet" href="/static/app.css?v={ASSET_V}"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231a1a1a'/%3E%3Cpath d='M8 9l8 15 8-15' stroke='%23c41e3a' stroke-width='3' fill='none'/%3E%3C/svg%3E">
 </head><body class="{'darkroom' if dark else ''}">
 <header class="mast"><div class="wrap line"><span>VibeReading · {issue_no()}<span class="hide-s"> · {today}</span></span><span class="hide-s">代码图文阅读器 · Text in, story out</span><span class="tc" data-clock>--:--:--</span></div>
-<div class="wrap bar"><a class="brand" href="/"><b>Vibe<i>·</i>Reading</b><span>纸与墨</span></a><nav class="nav">{nav}</nav></div></header>
+<div class="wrap bar"><a class="brand" href="/"><b>Vibe<i>·</i>Reading</b><span>纸与墨</span></a><div class="bar-r"><nav class="nav">{nav}</nav>{THEME_SWITCH}</div></div></header>
 <main>{body}</main>
-<footer class="foot"><div class="wrap"><span>MIT © 2026 Q1f730 · <a href="https://github.com/q1f0730/vibe-reading">github.com/q1f0730/vibe-reading</a></span><span>视觉借鉴 storytelling-web · Paper &amp; Ink · 0 外部请求</span></div></footer>
+<footer class="foot"><div class="wrap"><span>MIT © 2026 Q1f730 · <a href="https://github.com/q1f0730/vibe-reading">github.com/q1f0730/vibe-reading</a></span><span>视觉借鉴 storytelling-web · 交互动效灵感 Rewamp UI · Paper &amp; Ink · 0 外部请求</span></div></footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="/static/app.js?v={ASSET_V}"></script></body></html>"""
 
 
 # ------------------------------------------------------------------ home
+EDGE = ("VERBATIM 100% ◆ 0 EXTERNAL REQUESTS ◆ SINGLE FILE ◆ SEGMENT → PLAN → RENDER → VERIFY ◆ "
+        "VIBEREADING SAFETY FILM ◆ 1280 / 390 NO OVERFLOW ◆ CSS · SVG · CANVAS ◆ ")
+
+
 def home(user, sample, llm, labels):
     any_llm = any(llm.values())
     modes = ""
@@ -76,7 +94,7 @@ def home(user, sample, llm, labels):
  <div class="kicker"><b>01</b> 产品 / Product</div>
  <div class="hero-grid">
   <div>
-   <h1><span class="l">把一篇小说，</span><span class="l">排成会<span class="red">呼吸</span>的长文。</span><span class="en">Drop in a .txt — get a scroll-driven, ink-drawn reading page.</span></h1>
+   <h1 data-split><span class="l">把一篇小说，</span><span class="l">排成会<span class="red">呼吸</span>的长文。</span><span class="en" data-words>Drop in a .txt — get a scroll-driven, ink-drawn reading page.</span></h1>
    <p class="dek">上传 txt，AI 只写<b>分镜</b>：哪里换场、谁在说话、谁脸红、在哪插一幅墨线插画。正文由脚本<b>逐字搬运</b>，最后用无头浏览器逐段比对原文。</p>
    <div class="acts"><a class="btn" href="{'#upload' if user else '/register'}">{'开始生成' if user else '注册并开始'} <span class="arr">→</span></a><a class="btn ghost" href="/sample/kongyiji">先读示例《孔乙己》</a></div>
   </div>
@@ -126,7 +144,7 @@ def home(user, sample, llm, labels):
     <label><input type="checkbox" id="night"> 默认夜间主题</label>
     <label title="每章由 Mercury 挑关键场景，写一段沙箱里的滚动动画；自动校验，不合格回退预制组件"><input type="checkbox" id="hero"> 关键场景动画</label>
     <label class="hero-n">每章 <select id="heroMax" aria-label="每章关键场景动画上限"><option>1</option><option selected>2</option><option>3</option></select> 个</label></div></div>
-   <div class="go-row"><button class="btn" id="go" disabled>开始显影 <span class="arr">→</span></button><span class="est" id="est"></span></div>
+   <div class="go-row"><button class="btn go-film" id="go" disabled data-sending="送进暗房…"><span class="lbl">开始显影 <span class="arr">→</span></span></button><span class="est" id="est"></span></div>
    <div class="err" id="err" role="alert"></div>
   </div>
  </div>
@@ -136,6 +154,7 @@ def home(user, sample, llm, labels):
  <div class="wrap">
   <div class="kicker"><b>04</b> 流程 / Pipeline</div>
   <div class="sec-h"><h2>四格底片<em>Four frames, one print</em></h2><p>每一步都有独立的自检。规划失败会把错误回灌重试一次，再不行用规则修复；渲染后用 Chromium 在 1280 与 390 两种宽度下检查。</p></div>
+  <div class="edge" aria-hidden="true"><div class="edge-track"><span>{EDGE}</span><span>{EDGE}</span></div></div>
   <div class="strip">
    <div class="frame"><div class="fno">01 <span>00:00:00:00</span></div><h4>切分<small>Segment</small></h4><p>一个非空行一段，识别章节、日期行与脚注；拼回去必须与原文<b>逐字相同</b>。</p></div>
    <div class="frame"><div class="fno">02 <span>00:00:01:12</span></div><h4>规划<small>Plan</small></h4><p>LLM 只写分镜 JSON：人物、场景、逐段说话人、亲密度 / 紧张 / 脸红 <b>0–1</b> 数值。</p></div>
@@ -162,11 +181,11 @@ def auth(mode, user=None, nxt="/shelf"):
 <section class="auth">
  <div class="quote">
   <div class="tc">TC 00:04:51:16 <span>REEL 01 · 孔乙己</span><span>¶ 008 / 014</span></div>
-  <div><blockquote><span class="q">『</span>多乎哉？<br>不多也。<span class="q">』</span></blockquote>
+  <div><blockquote data-split><span class="q">『</span>多乎哉？<br>不多也。<span class="q">』</span></blockquote>
    <p class="attrib">——鲁迅《孔乙己》，第 8 段。<br>生成需要登录：每本书调用 <b>1–12</b> 次模型，额度有限，所以先认个门。</p></div>
  </div>
  <div class="panel">
-  <div class="tabs"><a href="/login{q}"{cur('login')}>登录<small>Sign in</small></a><a href="/register{q}"{cur('register')}>注册<small>Join</small></a></div>
+  <div class="tabs" data-morph><a href="/login{q}" data-tab="login"{cur('login')}>登录<small>Sign in</small></a><a href="/register{q}" data-tab="register"{cur('register')}>注册<small>Join</small></a><i class="tab-ink" aria-hidden="true"></i></div>
   <form id="authform" data-mode="{mode}" data-next="{esc(nxt)}" novalidate>
    {fields}
    <button class="btn" type="submit">{'创建账号' if reg else '登录'} <span class="arr">→</span></button>
@@ -193,10 +212,13 @@ def book_card(b, i, job_id=None, llm_any=False):
     if busy and job_id:
         open_a = f'<a href="/jobs/{esc(job_id)}">看进度</a>'
     err = f'<div class="err-line">{esc(b["error"])}</div>' if b["status"] == "failed" and b["error"] else ""
-    return f"""<article class="book" data-book="{esc(b['id'])}" data-vis="{esc(b['visibility'])}" data-hasplan="{1 if b['plan_json'] else 0}">
- <div class="top"><span>No.{i:02d} · {fmt_time(b['created_at'])}</span><span class="stamp {esc(b['status'])}">{STATUS_LABEL.get(b['status'], b['status'])}</span></div>
+    skel = ('<div class="skel" aria-hidden="true"><i></i><i></i><i></i></div>' if busy else "")
+    return f"""<article class="book" data-book="{esc(b['id'])}" data-vis="{esc(b['visibility'])}" data-hasplan="{1 if b['plan_json'] else 0}" data-status="{esc(b['status'])}">
+ <div class="tab"><span>No.{i:02d}</span></div>
+ <div class="top"><span>{fmt_time(b['created_at'])}</span><span class="stamp {esc(b['status'])}">{STATUS_LABEL.get(b['status'], b['status'])}</span></div>
  <h3><a href="{'/b/' + esc(b['id']) if b['html_path'] else ('/jobs/' + esc(job_id) if job_id else '#')}">{esc(b['title'])}</a></h3>
  <div class="by">{esc(b['author'] or '')}</div>
+ {skel}
  <div class="nums"><div><b>{fmt_num(b['char_count'])}</b><span>字</span></div><div><b>{b['segments'] or '—'}</b><span>段</span></div><div><b>{vtxt}</b><span>校验一致</span></div></div>
  <div class="meta"><span>{esc(model)} · {secs}s</span><span class="vis {esc(b['visibility'])}">{vis}</span></div>
  {_quality_line(b)}
@@ -221,7 +243,15 @@ def shelf(user, books, jobs_by_book, llm_any):
     done = sum(1 for b in books if b["status"] == "done")
     last = fmt_time(max((b["created_at"] for b in books), default=None))
     cards = "".join(book_card(b, len(books) - k, jobs_by_book.get(b["id"]), llm_any) for k, b in enumerate(books))
-    body = (f'<div class="books" id="books">{cards}</div>' if books else
+    cnt = {"all": len(books), "done": done, "busy": sum(1 for b in books if b["status"] in ("queued", "running")),
+           "failed": sum(1 for b in books if b["status"] == "failed")}
+    seg = "".join(f'<button type="button" role="tab" data-filter="{k}" aria-selected="{"true" if k == "all" else "false"}">{lab}<small>{cnt[k]}</small></button>'
+                  for k, lab in (("all", "全部"), ("done", "已完成"), ("busy", "显影中"), ("failed", "失败")))
+    tools = (f'<div class="shelf-tools"><div class="seg" role="tablist" aria-label="按状态筛选" data-morph>{seg}<i class="tab-ink" aria-hidden="true"></i></div>'
+             '<label class="capsule"><svg class="mg" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M12.6 12.6 17 17"/></svg>'
+             '<i class="caret" aria-hidden="true"></i><input type="search" id="shelfq" placeholder="按书名 / 作者筛选" aria-label="按书名或作者筛选" autocomplete="off"></label></div>'
+             '<p class="nores hide" id="nores">没有符合条件的书。</p>') if books else ""
+    body = (f'{tools}<div class="books" id="books">{cards}</div>' if books else
             """<div class="empty"><div class="zero">0</div><div><h3>书架还是空的。</h3><p>从一篇短篇开始：3,000 字以内的文本，plan.json 模式 2 秒、模型模式约 30 秒。</p>
 <div class="acts"><a class="btn" href="/#upload">交第一篇稿 <span class="arr">→</span></a><button class="link" type="button" data-try-sample style="background:none;border:0;border-bottom:1px solid var(--cinnabar);cursor:pointer">用《孔乙己》试一次</button></div></div></div>""")
     return f"""
@@ -232,7 +262,9 @@ def shelf(user, books, jobs_by_book, llm_any):
  {body}
  <details class="account"><summary>账号 · 注销 / Delete account</summary>
   <form id="delacct"><input class="inp" type="password" id="delpw" autocomplete="current-password" placeholder="输入密码确认：删除账号与全部书" required>
-  <button class="btn sm danger" type="submit">永久删除账号</button></form><div class="err" id="delerr"></div></details>
+  <div class="slide" data-slide><span class="slide-fill" aria-hidden="true"></span><span class="slide-lbl" aria-hidden="true">滑到底 · 永久删除账号</span>
+   <button type="button" class="slide-knob" aria-label="永久删除账号：按住向右拖到底，或按回车确认"><span aria-hidden="true">→</span></button></div>
+  <button class="btn sm danger sr-submit" type="submit" tabindex="-1" aria-hidden="true">永久删除账号</button></form><div class="err" id="delerr"></div></details>
 </section>"""
 
 
@@ -286,6 +318,11 @@ def _probe_cell(name, p):
     return ("✓" if p.get("ok") else "✕") + (" " + esc(extra()) if extra else "")
 
 
+def _probe_skel():
+    """探针跑的时候：九行骨架（Rewamp UI skeleton 的扫光思路，自写），每行就是一个待测项。"""
+    return '<table class="qtable skel-t" aria-hidden="true">' + "".join(f'<tr><th>{esc(lab)}</th><td><i class="sk"></i></td></tr>' for _, lab in PROBE_LABEL) + "</table>"
+
+
 def settings(user, v, crypto_ok, platform):
     c = (v or {}).get("config") or {}
     prof = (v or {}).get("profile") or {}
@@ -300,8 +337,11 @@ def settings(user, v, crypto_ok, platform):
         reasons = "".join(f"<li>{esc(x)}</li>" for x in prof.get("tier_reasons") or [])
         adapt = "".join(f"<li>{esc(x)}</li>" for x in prof.get("adaptations") or [])
         status = f"""<div class="mstatus" id="mstatus" data-status="{esc(v['status'])}"><div class="kicker"><b>{esc(v['tier'] or '…')}</b> 能力档案 / Profile</div>
-<p>{status}</p>{'<table class="qtable">' + rows + '</table>' if rows else ''}
+<p>{status}</p>{'<table class="qtable">' + rows + '</table>' if rows else ''}{_probe_skel() if v['status'] == 'probing' and not rows else ''}
 {('<p class="hint">分档依据：</p><ul class="hint">' + reasons + '</ul>') if reasons else ''}{('<p class="hint">自动适配：</p><ul class="hint">' + adapt + '</ul>') if adapt else ''}</div>"""
+    kind = c.get("kind", "openai")
+    kseg = "".join(f'<button type="button" role="radio" data-val="{k}" aria-checked="{"true" if kind == k else "false"}">{t}</button>'
+                   for k, t in (("openai", "OpenAI 兼容"), ("anthropic", "Anthropic"), ("gemini", "Gemini")))
     plat = "、".join(k for k, ok in platform.items() if ok) or "无"
     warn = "" if crypto_ok else '<div class="notice"><b>服务器没有配置加密密钥（VR_SECRET_KEY）。</b>为了不明文保存 key，暂时不能保存自己的模型；「测试」仍可用。</div>'
     return f"""
@@ -313,7 +353,9 @@ def settings(user, v, crypto_ok, platform):
  没有配置时用平台默认模型（当前可用：{esc(plat)}）。</p>
  {warn}
  <form id="mform" class="mform" autocomplete="off" novalidate>
-  <div class="field"><label for="m_kind">接口类型</label>{sel('kind', c.get('kind', 'openai'), list(KIND_LABEL.items()))}</div>
+  <div class="field"><label for="m_kind">接口类型</label>
+   <div class="seg kseg" role="radiogroup" aria-label="接口类型" data-morph data-for="m_kind">{kseg}<i class="tab-ink" aria-hidden="true"></i></div>
+   {sel('kind', c.get('kind', 'openai'), list(KIND_LABEL.items()))}</div>
   <div class="field"><label for="m_base_url">Base URL</label><input class="inp" id="m_base_url" name="base_url" maxlength="300" required value="{esc(c.get('base_url', ''))}" placeholder="https://api.deepseek.com/v1">
    <div class="hint">OpenAI 兼容填到 /v1 为止；Anthropic 如 https://api.anthropic.com；Gemini 如 https://generativelanguage.googleapis.com/v1beta。</div></div>
   <div class="field row2"><div><label for="m_model">模型名</label><input class="inp" id="m_model" name="model" maxlength="120" required value="{esc(c.get('model', ''))}" placeholder="deepseek-chat"></div>
@@ -344,11 +386,20 @@ def _fmt(x, suf=""):
     return "—" if x is None else f"{x}{suf}"
 
 
+def _bar(x):
+    """分数 → 墨线条（0–1 或 0–100 都认）。数字仍是主角，条只是第二读法。"""
+    if not isinstance(x, (int, float)):
+        return _fmt(x)
+    v = x / 100 if x > 1 else x
+    v = max(0.0, min(1.0, float(v)))
+    return f'<span class="qbar" style="--v:{v:.3f}"><b>{esc(x)}</b><i aria-hidden="true"></i></span>'
+
+
 def quality_page(user, b, q):
     if not q:
         return f'<section class="plain wrap"><div class="kicker"><b>QA</b> 质量报告</div><h1>还没有质量报告<small>No report</small></h1><p>这本书是旧版本生成的，重新生成一次就会附上。</p><a class="btn" href="/shelf">回书架 <span class="arr">→</span></a></section>'
     sc = q.get("scores") or {}
-    rows = "".join(f"<tr><th>{esc(lab)}</th><td>{_fmt(sc.get(k))}</td></tr>" for k, lab in SCORE_LABEL)
+    rows = "".join(f"<tr><th>{esc(lab)}</th><td>{_bar(sc.get(k))}</td></tr>" for k, lab in SCORE_LABEL)
     fl = q.get("floor") or {}
     FL = {"verbatim_100": "原文 100% 逐字一致", "no_missing_text": "没有漏掉任何原文段", "plan_complete": "分镜完整（每段都有、场景首尾相接）",
           "visuals_consistent_after_guard": "页面上的组件都与原文一致", "heroes_render_ok": "关键场景动画全部通过实测或已回退", "browser_verify": "浏览器校验（外链 / JS 报错 / 溢出）"}
@@ -358,7 +409,7 @@ def quality_page(user, b, q):
              ("降级段落", f"{q.get('rule_paragraphs', 0)} 段（{round(100 * (q.get('degraded_paragraph_ratio') or 0), 1)}%）"),
              ("场景", f"{sd.get('scenes')} 个 · 每场景 {sd.get('min')}–{sd.get('max')} 段（中位 {sd.get('median')}）"),
              ("组件", f"{dv.get('visuals')} 个 / {dv.get('visual_types')} 种；护栏去掉 {g.get('inconsistent', 0)} 个不符 + {g.get('capped', 0)} 个超量"),
-             ("关键场景动画", f"{hs.get('count', 0)} 个 · {json.dumps(hs.get('status') or {}, ensure_ascii=False)}" + (f" · 意象一致 {hs.get('imagery_consistency')}" if hs.get("imagery_consistency") is not None else "")),
+             ("关键场景动画", f"{hs.get('count', 0)} 个 · " + (" / ".join(f"{k} {v}" for k, v in (hs.get('status') or {}).items()) or "—") + (f" · 意象一致 {hs.get('imagery_consistency')}" if hs.get("imagery_consistency") is not None else "")),
              ("调用", f"{cost.get('calls')} 次 · 输出 {cost.get('tokens_out')} token · 重试 {cost.get('retries')} · 限流退避 {cost.get('transient')} · 内容过滤 {cost.get('content_filtered')}"),
              ("耗时", f"{q.get('seconds')} 秒")]
     frow = "".join(f"<tr><th>{esc(k)}</th><td>{esc(v)}</td></tr>" for k, v in facts)
@@ -366,7 +417,11 @@ def quality_page(user, b, q):
     return f"""
 <section class="plain wrap quality">
  <div class="kicker"><b>QA</b> 质量报告 · 只有你能看到 / Author only</div>
- <h1>《{esc(b['title'])}》<small>总分 {_fmt(q.get('overall'))} · {esc(q.get('tier') or '—')} 档 · 下限{'守住' if q.get('floor_ok') else '未守住'}</small></h1>
+ <h1>《{esc(b['title'])}》<small>Quality report · 总分 / 档位 / 下限</small></h1>
+ <div class="qhead"><div class="big">{_fmt(q.get('overall'))}<small>/ 100</small></div>
+  <span class="stamp {'ok' if q.get('floor_ok') else 'bad'}">下限{'守住' if q.get('floor_ok') else '未守住'}</span>
+  <dl><div><dt>档位</dt><dd><b>{esc(q.get('tier') or '—')}</b></dd></div><div><dt>降级段落</dt><dd><b>{round(100 * (q.get('degraded_paragraph_ratio') or 0), 1)}%</b></dd></div>
+  <div><dt>耗时</dt><dd><b>{_fmt(q.get('seconds'), ' s')}</b></dd></div></dl></div>
  <div class="qgrid"><div><h3>各项得分</h3><table class="qtable">{rows}</table></div>
  <div><h3>下限检查</h3><table class="qtable">{frows}</table></div></div>
  <h3>明细</h3><table class="qtable wide">{frow}</table>
@@ -383,7 +438,7 @@ def inject_author_badge(body, b):
         return body
     ok = q.get("floor_ok")
     badge = (f'<a href="/b/{esc(b["id"])}/quality" target="_top" title="质量报告（只有你能看到）" '
-             f'style="position:fixed;right:14px;bottom:14px;z-index:2147483000;font:12px/1.2 ui-monospace,Menlo,monospace;letter-spacing:.06em;'
+             f'style="position:fixed;right:14px;bottom:14px;z-index:85;font:12px/1.2 ui-monospace,Menlo,monospace;letter-spacing:.06em;'
              f'background:#1a1a1a;color:#faf9f7;padding:8px 11px;text-decoration:none;border-left:3px solid {"#3d7a4a" if ok else "#c41e3a"}">'
              f'作者视图 · 质量 {esc(q.get("overall"))} · {esc(q.get("tier") or "—")} 档</a>').encode()
     i = body.rfind(b"</body>")

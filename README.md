@@ -267,6 +267,28 @@ python3 -m pytest -q tests        # 或 python3 -m unittest discover tests
 plan.json 生成 + 原文校验 14/14、别人访问/删除/重生成/改可见性 403、重启后书架与会话仍在且中断任务标为失败、注销账号连带删除书。
 界面截图：`node tools/ui_shots.js http://127.0.0.1:8765 out/ui-shots`（首页 / 登录 / 注册 / 书架 / 进度页，桌面 1440 + 手机 390）。
 
+### 界面层（ui-rewamp）
+
+纸（浅）/ 墨（深）两套主题（右上角开关；没选过时跟随系统，记在 `localStorage`），所有动效在 `prefers-reduced-motion` 下关闭，仍是 0 外部请求、无构建步骤：
+
+| 交互 | 用在 | 设计参考（Rewamp UI） |
+|---|---|---|
+| 墨线下划线 | 顶部导航（悬停 / 当前页） | liquid-underline-navbar |
+| 纸 / 墨 滑块开关 | 顶部导航；阅读页“夜间”按钮 | theme-toggle |
+| 逐字显影 / 逐词显影 | 首页大标题、登录页引文 | split-text-reveal、word-by-word-text |
+| 片边字（随滚动加速） | 首页“四格底片” | velocity-marquee-text |
+| 胶片引带划过按钮 | 上传“开始显影” | slide-to-confirm-button（点击节奏） |
+| 滑动确认 | 注销账号（不可逆） | slide-to-confirm-button |
+| 滑动墨线标签 | 登录 / 注册切换、书架状态筛选、设置接口类型 | morphing-tab-navbar |
+| 搜索胶囊（放大镜 → 光标） | 书架按书名 / 作者筛选 | morph-search-capsule |
+| 档案袋书卡（索引签 + 纸面高光） | 书架 | folder-tab-card |
+| 骨架扫光 | 显影中的书卡、模型探针运行中 | skeleton |
+| 解码字 / 打字机日志 | 暗房进度页步骤状态、结果标题、最新一行日志 | character-scramble-text、typewriter-text |
+| 目录“镜头” | 阅读页目录（当前场景领一道破折号，远处渐隐） | kinetic-lens-sidebar |
+
+截图：`python3 tools/ui_rewamp_shots.py OUTDIR`（临时库 + 本地假模型造数据，《祝福》含关键场景动画；桌面 1440×900 + 手机 390×844，
+同时检查横向溢出 / 外部请求 / JS 报错），`python3 tools/contact_sheet.py OUTDIR` 拼图。需要 `pip install playwright` 与系统 Chromium。
+
 ## 部署（systemd --user）
 
 ```bash
@@ -300,6 +322,10 @@ systemctl --user daemon-reload && systemctl --user enable --now vibereading     
 
 页面视觉与阅读器结构借鉴了 [wang1212/storytelling-web](https://github.com/wang1212/storytelling-web)（MIT License, © 2026 wang1212）
 的 Scrolling 模式与 "Paper & Ink" 预设（配色、纸张噪点、滚动淡入、墨线描绘思路）。本项目的组件库、规划管线与阅读器运行时为重新实现。
+
+Web 界面的若干交互动效（见上文“界面层”表格）的设计灵感来自 [Rewamp UI](https://www.rewampui.com)（[palakonweb/Rewamp-UI](https://github.com/palakonweb/Rewamp-UI)，作者 palakonweb）。
+该仓库没有 LICENSE 文件（只有 CLI 子包 `cli/package.json` 声明 MIT，组件源码本身没有明确许可），因此**本项目没有拷贝它的任何源码**，
+而是用原生 CSS / JS 按纸墨编辑部风格重新实现，未使用 React / Tailwind / Framer Motion。
 
 ## License
 
